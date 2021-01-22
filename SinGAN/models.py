@@ -55,6 +55,7 @@ class GeneratorConcatSkip2CleanAdd(nn.Module):
             nn.Tanh()
         )
     def forward(self,x,y):
+        #todo: create concatination beween x and y insted of adding them before entering here!
         x = self.head(x)
         x = self.body(x)
         x = self.tail(x)
