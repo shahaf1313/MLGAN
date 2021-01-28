@@ -21,7 +21,7 @@ def get_arguments():
     parser.add_argument("--src_data_list", type=str, default='./dataset/gta5_list/train.txt', help="Path to the listing of images in the source dataset.")
     parser.add_argument("--trg_data_dir", type=str, default='/home/shahaf/data/cityscapes', help="Path to the directory containing the target dataset.")
     parser.add_argument("--trg_data_list", type=str, default='./dataset/cityscapes_list/train.txt', help="List of images in the target dataset.")
-    parser.add_argument("--num_workers", type=int, default=4, help="Number of threads for each worker")
+    parser.add_argument("--num_workers", type=int, default=8, help="Number of threads for each worker")
 
     # networks hyper parameters:
     parser.add_argument('--batch_size', type=int, default=1)

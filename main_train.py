@@ -1,5 +1,6 @@
 from SinGAN.manipulate import *
 from SinGAN.training import *
+from constants import H,W
 from data import CreateSrcDataLoader
 from data import CreateTrgDataLoader
 import SinGAN.functions as functions
@@ -15,21 +16,22 @@ if __name__ == '__main__':
 
 
     source_loader, target_loader = CreateSrcDataLoader(opt), CreateTrgDataLoader(opt)
-    source_loader_iter, target_loader_iter = iter(source_loader), iter(target_loader)
-
     opt.era_size = np.maximum(len(target_loader.dataset), len(source_loader.dataset))
-    opt.steps_per_era = int(np.floor(opt.era_size / opt.batch_size))
-    source_loader.dataset.SetEraSize(opt.era_size)
-    target_loader.dataset.SetEraSize(opt.era_size)
+    opt.max_batch_size = opt.batch_size
 
-    opt.source_loader = source_loader
-    opt.target_loader = target_loader
+    source_loaders, target_loaders =[], []
+    for i in range(opt.num_scales+1):
+        source_loader, target_loader = CreateSrcDataLoader(opt), CreateTrgDataLoader(opt)
+        source_loader.dataset.SetEraSize(opt.era_size)
+        target_loader.dataset.SetEraSize(opt.era_size)
+        source_loaders.append(source_loader)
+        target_loaders.append(target_loader)
+        if i%2==0 and i >0:
+            opt.batch_size = int(np.maximum(opt.batch_size/2, 1))
 
-    src_img, src_lbl, src_shapes, src_names = source_loader_iter.next()  # new batch source
-    trg_img, trg_lbl, trg_shapes, trg_names = target_loader_iter.next()  # new batch target
+    opt.source_loaders = source_loaders
+    opt.target_loaders = target_loaders
 
-    del source_loader_iter
-    del target_loader_iter
 
     Gs = []
     dir2save = functions.generate_dir2save(opt)
@@ -40,6 +42,6 @@ if __name__ == '__main__':
         pass
 
     real = functions.read_image(opt)
-    functions.adjust_scales2image(src_img, opt)
-    train(opt, Gs, src_img, trg_img)
+    functions.adjust_scales2image(H, W, opt)
+    train(opt)
     # SinGAN_generate(Gs,Zs,reals,NoiseAmp,opt)

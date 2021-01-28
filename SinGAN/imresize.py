@@ -38,7 +38,7 @@ def np2torch(x,opt):
     return x
 
 def torch2uint8(x):
-    x = x[0,:,:,:]
+    # x = x[0,:,:,:]
     x = x.permute((1,2,0))
     x = 255*denorm(x)
     x = x.cpu().numpy()
@@ -47,12 +47,17 @@ def torch2uint8(x):
 
 
 def imresize(im,scale,opt):
-    #s = im.shape
-    im = torch2uint8(im)
-    im = imresize_in(im, scale_factor=scale)
-    im = np2torch(im,opt)
-    #im = im[:, :, 0:int(scale * s[2]), 0:int(scale * s[3])]
-    return im
+    batch = None
+    for k in range(im.shape[0]):
+        curr = im[k]
+        curr = torch2uint8(curr)
+        curr = imresize_in(curr, scale_factor=scale)
+        curr = np2torch(curr, opt)
+        if batch is None:
+            batch = curr
+        else:
+            batch = torch.cat((batch, curr), 0)
+    return batch
 
 def imresize_to_shape(im,output_shape,opt):
     #s = im.shape

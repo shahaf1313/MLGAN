@@ -205,31 +205,15 @@ def read_image2np(opt):
     return x
 
 
-def save_networks(netG, netD, opt):
+def save_networks(netD, netG, opt):
     torch.save(netG.state_dict(), '%s/netG.pth' % (opt.outf))
     torch.save(netD.state_dict(), '%s/netD.pth' % (opt.outf))
 
 
-def adjust_scales2image(real_, opt):
-    if opt.min_size is not None and opt.max_size is not None:
-        # opt.num_scales = int((math.log(math.pow(opt.min_size / (real_.shape[2]), 1), opt.scale_factor_init))) + 1
-        opt.num_scales = math.ceil(math.log(opt.min_size / min(real_.shape[2], real_.shape[3]), opt.scale_factor_init)) + 1
-        scale2stop = math.ceil(math.log(min([opt.max_size, max([real_.shape[2], real_.shape[3]])]) / max([real_.shape[2], real_.shape[3]]), opt.scale_factor_init))
-        opt.stop_scale = opt.num_scales - scale2stop
-        opt.scale1 = min(opt.max_size / max([real_.shape[2], real_.shape[3]]), 1)  # min(250/max([real_.shape[0],real_.shape[1]]),1)
-        real = imresize(real_, opt.scale1, opt)
-        # opt.scale_factor = math.pow(opt.min_size / (real.shape[2]), 1 / (opt.stop_scale))
-        opt.scale_factor = math.pow(opt.min_size / (min(real.shape[2], real.shape[3])), 1 / (opt.stop_scale))
-        scale2stop = math.ceil(math.log(min([opt.max_size, max([real_.shape[2], real_.shape[3]])]) / max([real_.shape[2], real_.shape[3]]), opt.scale_factor_init))
-        opt.stop_scale = opt.num_scales - scale2stop
-    elif opt.num_scales is not None:
-        opt.max_size = max(real_.shape[2], real_.shape[3])
-        opt.min_size = math.ceil(min(real_.shape[2], real_.shape[3]) * math.pow(opt.scale_factor, opt.num_scales))
-        opt.stop_scale = opt.num_scales
-        real = real_
-    else:
-        raise Exception('Only one of min_size and max_size is not None/scale_num is None. Please try again.')
-    return real
+def adjust_scales2image(H, W, opt):
+    opt.max_size = max(H, W)
+    opt.min_size = math.ceil(min(H, W) * math.pow(opt.scale_factor, opt.num_scales))
+    opt.stop_scale = opt.num_scales
 
 
 def adjust_scales2image_SR(real_, opt):
@@ -246,13 +230,12 @@ def adjust_scales2image_SR(real_, opt):
     return real
 
 
-def creat_reals_pyramid(real, opt):
+def creat_reals_pyramid(real, up_to_scale, opt):
     reals = []
     real = real[:, 0:3, :, :]
-    for i in range(0, opt.stop_scale + 1, 1):
+    for i in range(0, up_to_scale + 1, 1):
         scale = math.pow(opt.scale_factor, opt.stop_scale - i)
         curr_real = imresize(real, scale, opt)
-
         reals.append(curr_real)
     return reals
 
