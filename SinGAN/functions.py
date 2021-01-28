@@ -205,10 +205,9 @@ def read_image2np(opt):
     return x
 
 
-def save_networks(netG, netD, z, opt):
+def save_networks(netG, netD, opt):
     torch.save(netG.state_dict(), '%s/netG.pth' % (opt.outf))
     torch.save(netD.state_dict(), '%s/netD.pth' % (opt.outf))
-    torch.save(z, '%s/z_opt.pth' % (opt.outf))
 
 
 def adjust_scales2image(real_, opt):
@@ -253,6 +252,7 @@ def creat_reals_pyramid(real, opt):
     for i in range(0, opt.stop_scale + 1, 1):
         scale = math.pow(opt.scale_factor, opt.stop_scale - i)
         curr_real = imresize(real, scale, opt)
+
         reals.append(curr_real)
     return reals
 

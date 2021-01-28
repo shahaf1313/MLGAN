@@ -32,8 +32,6 @@ if __name__ == '__main__':
     del target_loader_iter
 
     Gs = []
-    Zs = []
-    NoiseAmp = []
     dir2save = functions.generate_dir2save(opt)
 
     try:
@@ -43,5 +41,5 @@ if __name__ == '__main__':
 
     real = functions.read_image(opt)
     functions.adjust_scales2image(src_img, opt)
-    train(opt, Gs, Zs, NoiseAmp, src_img, trg_img)
+    train(opt, Gs, src_img, trg_img)
     # SinGAN_generate(Gs,Zs,reals,NoiseAmp,opt)
