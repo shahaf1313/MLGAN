@@ -43,3 +43,4 @@ if __name__ == '__main__':
     real = functions.read_image(opt)
     functions.adjust_scales2image(H, W, opt)
     train(opt)
+    print('Finished Training.')

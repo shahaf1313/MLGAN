@@ -30,13 +30,13 @@ def train(opt):
         Dst_curr, Gst_curr = init_models(opt)
         Dts_curr, Gts_curr = init_models(opt)
         if (nfc_prev == opt.nfc):
-            Dst_curr.load_state_dict(torch.load('%s/%d/Dst_curr.pth' % (opt.out_, scale_num - 1)))
-            Gst_curr.load_state_dict(torch.load('%s/%d/Gst_curr.pth' % (opt.out_, scale_num - 1)))
-            Dts_curr.load_state_dict(torch.load('%s/%d/Dts_curr.pth' % (opt.out_, scale_num - 1)))
-            Gts_curr.load_state_dict(torch.load('%s/%d/Gts_curr.pth' % (opt.out_, scale_num - 1)))
-
-        Dst_curr, Gst_curr = nn.DataParallel(Dst_curr, device_ids=opt.gpus), nn.DataParallel(Gst_curr, device_ids=opt.gpus)
-        Dts_curr, Gts_curr = nn.DataParallel(Dts_curr, device_ids=opt.gpus), nn.DataParallel(Gts_curr, device_ids=opt.gpus)
+            Dst_curr.load_state_dict(torch.load('%s/%d/netDst.pth' % (opt.out_, scale_num - 1)))
+            Gst_curr.load_state_dict(torch.load('%s/%d/netGst.pth' % (opt.out_, scale_num - 1)))
+            Dts_curr.load_state_dict(torch.load('%s/%d/netDts.pth' % (opt.out_, scale_num - 1)))
+            Gts_curr.load_state_dict(torch.load('%s/%d/netGts.pth' % (opt.out_, scale_num - 1)))
+        if len(opt.gpus) > 1:
+            Dst_curr, Gst_curr = nn.DataParallel(Dst_curr, device_ids=opt.gpus), nn.DataParallel(Gst_curr, device_ids=opt.gpus)
+            Dts_curr, Gts_curr = nn.DataParallel(Dts_curr, device_ids=opt.gpus), nn.DataParallel(Gts_curr, device_ids=opt.gpus)
 
         scale_nets = train_single_scale(Dst_curr, Gst_curr, Dts_curr, Gts_curr, Gst, Gts, Dst, Dts, opt)
         for net in scale_nets:
@@ -72,10 +72,8 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
         schedulerDts = torch.optim.lr_scheduler.MultiStepLR(optimizer=optimizerDts, milestones=[1600], gamma=opt.gamma)
         schedulerGts = torch.optim.lr_scheduler.MultiStepLR(optimizer=optimizerGts, milestones=[1600], gamma=opt.gamma)
 
-        discriminator_st_steps = 0
-        generator_st_steps = 0
-        discriminator_ts_steps = 0
-        generator_ts_steps = 0
+        discriminator_steps = 0
+        generator_steps = 0
         for batch_num, ((src_img, src_lbl, src_shapes, src_names), (trg_img, trg_lbl, trg_shapes, trg_names)) in enumerate(zip(opt.source_loaders[opt.curr_scale], opt.target_loaders[opt.curr_scale])):
             source_scales = functions.creat_reals_pyramid(src_img, opt)
             target_scales = functions.creat_reals_pyramid(trg_img, opt)
@@ -88,25 +86,26 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
             ############################
             # (1) Update D networks: maximize D(x) + D(G(z))
             ###########################
-
+            fake_sit, fake_tis = None, None
             for j in range(opt.Dsteps):
                 #train discriminator networks between domains (S->T, T->S)
 
                 #S -> T:
                 real_images = target_scales[opt.curr_scale]
                 D_x, D_G_z, errD = adversarial_disciriminative_train(netDst, optimizerDst, netGst, Gst, real_images, source_scales, m_noise, m_image, opt)
-                opt.tb.add_scalar('Scale%d/ST/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_st_steps)
-                opt.tb.add_scalar('Scale%d/ST/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_st_steps)
-                opt.tb.add_scalar('Scale%d/ST/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_st_steps)
-                discriminator_st_steps += 1
+                opt.tb.add_scalar('Scale%d/ST/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_steps)
+                opt.tb.add_scalar('Scale%d/ST/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_steps)
+                opt.tb.add_scalar('Scale%d/ST/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_steps)
+
 
                 # T -> S:
                 real_images = source_scales[opt.curr_scale]
                 D_x, D_G_z, errD = adversarial_disciriminative_train(netDts, optimizerDts, netGts, Gts, real_images, target_scales, m_noise, m_image, opt)
-                opt.tb.add_scalar('Scale%d/TS/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_ts_steps)
-                opt.tb.add_scalar('Scale%d/TS/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_ts_steps)
-                opt.tb.add_scalar('Scale%d/TS/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_ts_steps)
+                opt.tb.add_scalar('Scale%d/TS/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_steps)
+                opt.tb.add_scalar('Scale%d/TS/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_steps)
+                opt.tb.add_scalar('Scale%d/TS/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_steps)
 
+                discriminator_steps += 1
 
             ############################
             # (2) Update G networks: maximize D(G(z)), minimize Gst(Gts(s))-s and vice versa
@@ -116,25 +115,30 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                 # train generator networks between domains (S->T, T->S)
 
                 # S -> T:
-                errG = adversarial_generative_train(netGst, optimizerGst, netDst, Gst, source_scales, m_noise, m_image, opt)
-                opt.tb.add_scalar('Scale%d/ST/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_st_steps)
-                generator_st_steps += 1
+                errG, fake_sit = adversarial_generative_train(netGst, optimizerGst, netDst, Gst, source_scales, m_noise, m_image, opt)
+                opt.tb.add_scalar('Scale%d/ST/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
 
                 # T -> S:
-                errG = adversarial_generative_train(netGts, optimizerGts, netDts, Gts, target_scales, m_noise, m_image, opt)
-                opt.tb.add_scalar('Scale%d/TS/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_ts_steps)
-                generator_ts_steps += 1
+                errG, fake_tis = adversarial_generative_train(netGts, optimizerGts, netDts, Gts, target_scales, m_noise, m_image, opt)
+                opt.tb.add_scalar('Scale%d/TS/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
 
                 # Identity Loss:
+                loss_x, loss_y, loss_id = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, Gst,
+                                                              netGts, optimizerGts, target_scales[opt.curr_scale], source_scales, Gts, m_image, m_noise, opt)
+                opt.tb.add_scalar('Scale%d/Identity/LossX' % opt.curr_scale, loss_x.item(), generator_steps)
+                opt.tb.add_scalar('Scale%d/Identity/LossY' % opt.curr_scale, loss_y.item(), generator_steps)
+                opt.tb.add_scalar('Scale%d/Identity/Loss' % opt.curr_scale, loss_id.item(), generator_steps)
+
+                generator_steps += 1
 
             if (batch_num + 1) % 25 == 0 or batch_num == 0:
                 print('scale %d:[%d/%d]' % (opt.curr_scale, batch_num + 1, len(opt.source_loaders[opt.curr_scale])))
 
             if (batch_num + 1) % 250 == 0 or batch_num == 0:
-                opt.tb.add_image('Scale%d/fake_sit' % (len(Gs)), (fake[0] + 1) / 2, batch_num + 1)
-                # tb.add_images('Scale%d/reconstruction' % (len(Gs)), (prev_rec+1)/2, batch_num+1)
-                opt.tb.add_image('Scale%d/source' % (len(Gs)), (source_scale[0] + 1) / 2, batch_num + 1)
-                opt.tb.add_image('Scale%d/target' % (len(Gs)), (target_scale[0] + 1) / 2, batch_num + 1)
+                opt.tb.add_image('Scale%d/fake_sit' % opt.curr_scale, (fake_sit[0] + 1) / 2, batch_num + 1)
+                opt.tb.add_image('Scale%d/fake_tis' % opt.curr_scale, (fake_tis[0] + 1) / 2, batch_num + 1)
+                opt.tb.add_image('Scale%d/source' % opt.curr_scale, (source_scales[opt.curr_scale][0] + 1) / 2, batch_num + 1)
+                opt.tb.add_image('Scale%d/target' % opt.curr_scale, (target_scales[opt.curr_scale][0] + 1) / 2, batch_num + 1)
                 # plt.imsave('%s/D_fake.png'   % (opt.outf), functions.convert_image_np(D_fake_map))
                 # plt.imsave('%s/D_real.png'   % (opt.outf), functions.convert_image_np(D_real_map))
                 # plt.imsave('%s/z_opt.png'    % (opt.outf), functions.convert_image_np(z_opt.detach()), vmin=0, vmax=1)
@@ -147,9 +151,13 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
             schedulerDts.step()
             schedulerGts.step()
 
-        functions.save_networks(netDst.module, netGst.module, netDts.module, netGts.module, opt)
         opt.tb.close()
-        return netDst.module, netGst.module, netDts.module, netGts.module
+        if (len(opt.gpus) > 1):
+            functions.save_networks(netDst.module, netGst.module, netDts.module, netGts.module, opt)
+            return netDst.module, netGst.module, netDts.module, netGts.module
+        else:
+            functions.save_networks(netDst, netGst, netDts, netGts, opt)
+            return netDst, netGst, netDts, netGts
 
 def adversarial_disciriminative_train(netD, optimizerD, netG, Gs, real_images, from_scales, m_noise, m_image, opt):
     # train with real image
@@ -201,7 +209,7 @@ def adversarial_generative_train(netG, optimizerG, netD, Gs, from_scales, m_nois
     # rec_loss = rec_loss.detach()
 
     optimizerG.step()
-    return errG
+    return errG, fake
 
 def cycle_consistency_loss(netGx, optimizerGx, x, x_scales, Xs, netGy, optimizerGy, y, y_scales, Ys, m_image, m_noise, opt):
     criterion = nn.L1Loss()
@@ -219,7 +227,7 @@ def cycle_consistency_loss(netGx, optimizerGx, x, x_scales, Xs, netGy, optimizer
     prev_yx = m_image(prev_yx)
     curr_yx = m_noise(Gy_x)
     Gx_Gy_x = netGx(curr_yx, prev_yx)
-    loss_x = opt.idx * criterion(Gx_Gy_x - x)
+    loss_x = opt.idx * criterion(Gx_Gy_x, x)
     loss_x.backward()
 
     # Gx(y):
@@ -233,7 +241,7 @@ def cycle_consistency_loss(netGx, optimizerGx, x, x_scales, Xs, netGy, optimizer
     prev_xy = m_image(prev_xy)
     curr_xy = m_noise(Gx_y)
     Gy_Gx_y = netGx(curr_xy, prev_xy)
-    loss_y = opt.idy * criterion(Gy_Gx_y - y)
+    loss_y = opt.idy * criterion(Gy_Gx_y, y)
     loss_y.backward()
 
     loss = loss_x + loss_y
