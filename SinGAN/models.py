@@ -36,6 +36,8 @@ class WDiscriminator(nn.Module):
         x = self.head(x)
         x = self.body(x)
         x = self.tail(x)
+        #todo: I Added! see if neccessairy!
+        x = torch.tanh(x)
         return x
 
 

@@ -43,4 +43,3 @@ if __name__ == '__main__':
     real = functions.read_image(opt)
     functions.adjust_scales2image(H, W, opt)
     train(opt)
-    # SinGAN_generate(Gs,Zs,reals,NoiseAmp,opt)
