@@ -44,6 +44,8 @@ class cityscapesDataSetLabel(data.Dataset):
         image = (image - 128.) / 128  # change from 0..255 to -1..1
         return image.copy(), label_copy.copy(), np.array(size), name
 
-    def SetEraSize(self, era_min_size):
-        self.img_ids = self.img_ids * int(np.ceil(float(era_min_size) / len(self.img_ids)))
+    def SetEraSize(self, era_size):
+        if (era_size > len(self.img_ids)):
+            self.img_ids = self.img_ids * int(np.ceil(float(era_size) / len(self.img_ids)))
+        self.img_ids = self.img_ids[:era_size]
 

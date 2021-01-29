@@ -303,6 +303,7 @@ def post_config(opt):
     opt.nfc_init = opt.nfc
     opt.min_nfc_init = opt.min_nfc
     opt.scale_factor_init = opt.scale_factor
+    opt.input_name = 'balloons.png'
     opt.out_ = 'TrainedModels/%s/scale_factor=%f/' % (opt.input_name[:-4], opt.scale_factor)
     if opt.mode == 'SR':
         opt.alpha = 100
@@ -312,6 +313,8 @@ def post_config(opt):
     print("Random Seed: ", opt.manualSeed)
     random.seed(opt.manualSeed)
     torch.manual_seed(opt.manualSeed)
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(opt.gpus)[1:-1].strip(' ')
     if torch.cuda.is_available() and opt.not_cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
     return opt

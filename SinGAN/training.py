@@ -30,7 +30,7 @@ def train(opt):
         if (nfc_prev == opt.nfc):
             G_curr.load_state_dict(torch.load('%s/%d/netG.pth' % (opt.out_, scale_num - 1)))
             D_curr.load_state_dict(torch.load('%s/%d/netD.pth' % (opt.out_, scale_num - 1)))
-        D_curr, G_curr = nn.DataParallel(D_curr, device_ids=[0,1,2,3,4,5,6]), nn.DataParallel(G_curr, device_ids=[0,1,2,3,4,5,6])
+        D_curr, G_curr = nn.DataParallel(D_curr, device_ids=opt.gpus), nn.DataParallel(G_curr, device_ids=opt.gpus)
 
         D_curr, G_curr = train_single_scale(D_curr, G_curr, Gs, opt)
 
@@ -63,9 +63,8 @@ def train_single_scale(netD, netG, Gs, opt):
     discriminator_steps = 0
     generator_steps = 0
     for batch_num, ((src_img, src_lbl, src_shapes, src_names), (trg_img, trg_lbl, trg_shapes, trg_names)) in enumerate(zip(opt.source_loaders[curr_scale], opt.target_loaders[curr_scale])):
-        if batch_num > opt.niter:
-            break
-
+        # if(batch_num>opt.niter):
+        #     break
         source_scales = functions.creat_reals_pyramid(src_img, curr_scale, opt)
         target_scales = functions.creat_reals_pyramid(trg_img, curr_scale, opt)
         source_scale = source_scales[len(Gs)]
@@ -88,7 +87,7 @@ def train_single_scale(netD, netG, Gs, opt):
             errD_real.backward(retain_graph=True)
             D_x = -errD_real.item()
 
-            # train with fakזe
+            # train with fake
             prev = concat_pyramid(Gs, source_scales, target_scales, m_noise, m_image, opt)
             prev = m_image(prev)
             curr = m_noise(source_scale)
@@ -116,6 +115,15 @@ def train_single_scale(netD, netG, Gs, opt):
 
         for j in range(opt.Gsteps):
             netG.zero_grad()
+
+            ##I added!
+            # train with fake
+            prev = concat_pyramid(Gs, source_scales, target_scales, m_noise, m_image, opt)
+            prev = m_image(prev)
+            curr = m_noise(source_scale)
+            fake = netG(curr, prev)
+            ##end
+
             output = netD(fake.detach())
             errG = -output.mean()
             errG.backward(retain_graph=True)
