@@ -126,7 +126,7 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
 
                 # Identity Loss:
                 loss_x, loss_y, loss_id = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, Gst,
-                                                              netGts, optimizerGts, target_scales[opt.curr_scale], source_scales, Gts, m_image, m_noise, opt)
+                                                              netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, Gts, m_image, m_noise, opt)
                 opt.tb.add_scalar('Scale%d/Identity/LossX' % opt.curr_scale, loss_x.item(), generator_steps)
                 opt.tb.add_scalar('Scale%d/Identity/LossY' % opt.curr_scale, loss_y.item(), generator_steps)
                 opt.tb.add_scalar('Scale%d/Identity/Loss' % opt.curr_scale, loss_id.item(), generator_steps)
