@@ -2,7 +2,6 @@ from constants import IMG_MEAN, IMG_CROP_SIZE
 from torch.utils import data
 from data.gta5_dataset import GTA5DataSet
 from data.cityscapes_dataset import cityscapesDataSet
-from data.cityscapes_dataset_label import cityscapesDataSetLabel
 from data.synthia_dataset import SYNDataSet
 
 
@@ -28,13 +27,13 @@ def CreateSrcDataLoader(args, mode=None):
 
 def CreateTrgDataLoader(args, mode='train'):
     if mode == 'train':
-        target_dataset = cityscapesDataSetLabel(args.trg_data_dir,
+        target_dataset = cityscapesDataSet(args.trg_data_dir,
                                                 args.trg_data_list,
                                                 crop_size=IMG_CROP_SIZE,
                                                 mean=IMG_MEAN,
                                                 set=mode)
     elif mode == 'val':
-        target_dataset = cityscapesDataSetLabel(args.trg_data_dir,
+        target_dataset = cityscapesDataSet(args.trg_data_dir,
                                                 args.trg_data_list,
                                                 crop_size=IMG_CROP_SIZE,
                                                 mean=IMG_MEAN,

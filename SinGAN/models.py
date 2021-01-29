@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn
-import numpy as np
-import torch.nn.functional as F
 
 
 class ConvBlock(nn.Sequential):
@@ -46,7 +44,9 @@ class GeneratorConcatSkip2CleanAdd(nn.Module):
         super(GeneratorConcatSkip2CleanAdd, self).__init__()
         self.is_cuda = torch.cuda.is_available()
         N = opt.nfc
-        self.head = ConvBlock(2*opt.nc_im,N,opt.ker_size,opt.padd_size,1) #GenConvTransBlock(opt.nc_z,N,opt.ker_size,opt.padd_size,opt.stride)
+        self.is_initial_scale = opt.curr_scale == 0
+        alpha = 1 if self.is_initial_scale else 0
+        self.head = ConvBlock((2-alpha)*opt.nc_im,N,opt.ker_size,opt.padd_size,1) #GenConvTransBlock(opt.nc_z,N,opt.ker_size,opt.padd_size,opt.stride)
         self.body = nn.Sequential()
         for i in range(opt.num_layer-2):
             N = int(opt.nfc/pow(2,(i+1)))
@@ -57,7 +57,10 @@ class GeneratorConcatSkip2CleanAdd(nn.Module):
             nn.Tanh()
         )
     def forward(self, curr_scale, prev_scale):
-        z = torch.cat((curr_scale, prev_scale), 1)
+        if self.is_initial_scale:
+            z = curr_scale
+        else:
+            z = torch.cat((curr_scale, prev_scale), 1)
         z = self.head(z)
         z = self.body(z)
         z = self.tail(z)

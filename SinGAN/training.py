@@ -29,7 +29,7 @@ def train(opt):
 
         Dst_curr, Gst_curr = init_models(opt)
         Dts_curr, Gts_curr = init_models(opt)
-        if (nfc_prev == opt.nfc):
+        if (nfc_prev == opt.nfc and opt.curr_scale > 1):
             Dst_curr.load_state_dict(torch.load('%s/%d/netDst.pth' % (opt.out_, scale_num - 1)))
             Gst_curr.load_state_dict(torch.load('%s/%d/netGst.pth' % (opt.out_, scale_num - 1)))
             Dts_curr.load_state_dict(torch.load('%s/%d/netDts.pth' % (opt.out_, scale_num - 1)))
@@ -75,6 +75,8 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
         discriminator_steps = 0
         generator_steps = 0
         for batch_num, ((src_img, src_lbl, src_shapes, src_names), (trg_img, trg_lbl, trg_shapes, trg_names)) in enumerate(zip(opt.source_loaders[opt.curr_scale], opt.target_loaders[opt.curr_scale])):
+            # if batch_num > 3:
+            #     break
             source_scales = functions.creat_reals_pyramid(src_img, opt)
             target_scales = functions.creat_reals_pyramid(trg_img, opt)
 

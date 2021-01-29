@@ -31,10 +31,7 @@ if __name__ == '__main__':
     opt.source_loaders = source_loaders
     opt.target_loaders = target_loaders
 
-
-    Gs = []
     dir2save = functions.generate_dir2save(opt)
-
     try:
         os.makedirs(dir2save)
     except OSError:

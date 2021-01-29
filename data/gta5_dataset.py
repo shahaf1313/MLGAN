@@ -6,7 +6,7 @@ from constants import IGNORE_LABEL
 
 class GTA5DataSet(data.Dataset):
 
-    def __init__(self, root, list_path, crop_size, ignore_label=IGNORE_LABEL, mean=None):
+    def __init__(self, root, list_path, crop_size, get_label_image=False, ignore_label=IGNORE_LABEL, mean=None):
         self.root = root  # folder for GTA5 which contains subfolder images, labels
         self.list_path = list_path
         self.crop_size = crop_size
@@ -15,6 +15,7 @@ class GTA5DataSet(data.Dataset):
         self.mean = mean
         self.img_ids = [i_id.strip() for i_id in open(list_path)]
         self.files = []
+        self.get_label_image= get_label_image
 
         self.id_to_trainid = {7: 0, 8: 1, 11: 2, 12: 3, 13: 4, 17: 5,
                               19: 6, 20: 7, 21: 8, 22: 9, 23: 10, 24: 11, 25: 12,
@@ -25,10 +26,13 @@ class GTA5DataSet(data.Dataset):
     def __getitem__(self, index):
         name = self.img_ids[index]
         image = Image.open(osp.join(self.root, "images/%s" % name)).convert('RGB')
-        label = Image.open(osp.join(self.root, "labels/%s" % name))
+        label, label_copy = np.array(0), np.array(0)
+        if self.get_label_image:
+            label = Image.open(osp.join(self.root, "labels/%s" % name))
         # resize
         image = image.resize(self.resize, Image.BICUBIC)
-        label = label.resize(self.resize, Image.NEAREST)
+        if self.get_label_image:
+            label = label.resize(self.resize, Image.NEAREST)
 
         # (left, upper, right, lower)
         left = self.resize[0]-self.crop_size[0]
@@ -40,20 +44,22 @@ class GTA5DataSet(data.Dataset):
         lower= upper+ self.crop_size[1]
 
         image = image.crop((left, upper, right, lower))
-        label = label.crop((left, upper, right, lower))
+        if self.get_label_image:
+            label = label.crop((left, upper, right, lower))
 
         image = np.asarray(image, np.float32)
-        label = np.asarray(label, np.float32)
-
-        label_copy = self.ignore_label * np.ones(label.shape, dtype=np.float32)
-        for k, v in self.id_to_trainid.items():
-            label_copy[label == k] = v
+        if self.get_label_image:
+            label = np.asarray(label, np.float32)
+            label_copy = self.ignore_label * np.ones(label.shape, dtype=np.float32)
+            for k, v in self.id_to_trainid.items():
+                label_copy[label == k] = v
+            label_copy = label_copy.copy()
 
         size = image.shape
         image -= self.mean
         image = image.transpose((2, 0, 1))
         image = (image - 128.) / 128  # change from 0..255 to -1..1
-        return image.copy(), label_copy.copy(), np.array(size), name
+        return image.copy(), label_copy, np.array(size), name
 
     def SetEraSize(self, era_size):
         if (era_size > len(self.img_ids)):
