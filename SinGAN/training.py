@@ -126,7 +126,8 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
 
                 # Identity Loss:
                 loss_x, loss_y, loss_id = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, Gst,
-                                                              netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, Gts, m_image, m_noise, opt)
+                                                                 netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, Gts,
+                                                                 m_image, m_noise, opt)
                 opt.tb.add_scalar('Scale%d/Identity/LossX' % opt.curr_scale, loss_x.item(), generator_steps)
                 opt.tb.add_scalar('Scale%d/Identity/LossY' % opt.curr_scale, loss_y.item(), generator_steps)
                 opt.tb.add_scalar('Scale%d/Identity/Loss' % opt.curr_scale, loss_id.item(), generator_steps)
@@ -165,9 +166,9 @@ def adversarial_disciriminative_train(netD, optimizerD, netG, Gs, real_images, f
     # train with real image
     netD.zero_grad()
     output = netD(real_images).to(opt.device)
-    errD_real = -output.mean()  # -a
+    errD_real = -output.mean()
     errD_real.backward(retain_graph=True)
-    D_x = -errD_real.item()
+    D_x = errD_real.item()
 
     # train with fake
     prev = concat_pyramid(Gs, from_scales, m_noise, m_image, opt)
@@ -177,7 +178,7 @@ def adversarial_disciriminative_train(netD, optimizerD, netG, Gs, real_images, f
     output = netD(fake_images.detach())
     errD_fake = output.mean()
     errD_fake.backward(retain_graph=True)
-    D_G_z = output.mean().item()
+    D_G_z = errD_fake.item()
 
     gradient_penalty = functions.calc_gradient_penalty(netD, real_images, fake_images, opt.lambda_grad, opt.device)
     gradient_penalty.backward()
