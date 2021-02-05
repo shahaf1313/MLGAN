@@ -3,19 +3,17 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 import torch.nn as nn
-import scipy.io as sio
+import datetime
 import math
+from PIL import Image
+from torchvision import transforms
 from skimage import io as img
 from skimage import color, morphology, filters
-# from skimage import morphology
-# from skimage import filters
 from SinGAN.imresize import imresize
 import os
+import sys
 import random
 from sklearn.cluster import KMeans
-
-
-# custom weights initialization called on netG and netD
 
 def read_image(opt):
     x = img.imread('%s%s' % (opt.input_img, opt.ref_image))
@@ -136,6 +134,20 @@ def move_to_cpu(t):
     t = t.to(torch.device('cpu'))
     return t
 
+def imresize_torch(image_batch, scale, opt):
+    to_pil = transforms.ToPILImage()
+    to_torch = transforms.PILToTensor()
+    resized_batch = None
+    for k in range(image_batch.shape[0]):
+        pil_im = to_pil(image_batch[k])
+        new_size = (np.ceil(scale * np.array(pil_im.size))).astype(np.int)
+        new_image = pil_im.resize(new_size, Image.BICUBIC)
+        new_image = to_torch(new_image)
+        if resized_batch is None:
+            resized_batch = new_image.unsqueeze(0)
+        else:
+            resized_batch = torch.cat((resized_batch, new_image.unsqueeze(0)), 0)
+    return resized_batch.to(opt.device)
 
 def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA, device):
     # print real_data.size()
@@ -242,22 +254,22 @@ def creat_reals_pyramid(real, opt):
     return reals
 
 
-def load_trained_pyramid(opt, mode_='train'):
-    # dir = 'TrainedModels/%s/scale_factor=%f' % (opt.input_name[:-4], opt.scale_factor_init)
-    mode = opt.mode
-    opt.mode = 'train'
-    if (mode == 'animation_train') | (mode == 'SR_train') | (mode == 'paint_train'):
-        opt.mode = mode
-    dir = generate_dir2save(opt)
-    if (os.path.exists(dir)):
-        Gs = torch.load('%s/Gs.pth' % dir)
-        Zs = torch.load('%s/Zs.pth' % dir)
-        reals = torch.load('%s/reals.pth' % dir)
-        NoiseAmp = torch.load('%s/NoiseAmp.pth' % dir)
-    else:
-        print('no appropriate trained model is exist, please train first')
-    opt.mode = mode
-    return Gs, Zs, reals, NoiseAmp
+# def load_trained_pyramid(opt, mode_='train'):
+#     # dir = 'TrainedModels/%s/scale_factor=%f' % (opt.input_name[:-4], opt.scale_factor_init)
+#     mode = opt.mode
+#     opt.mode = 'train'
+#     if (mode == 'animation_train') | (mode == 'SR_train') | (mode == 'paint_train'):
+#         opt.mode = mode
+#     dir = generate_dir2save(opt)
+#     if (os.path.exists(dir)):
+#         Gs = torch.load('%s/Gs.pth' % dir)
+#         Zs = torch.load('%s/Zs.pth' % dir)
+#         reals = torch.load('%s/reals.pth' % dir)
+#         NoiseAmp = torch.load('%s/NoiseAmp.pth' % dir)
+#     else:
+#         print('no appropriate trained model is exist, please train first')
+#     opt.mode = mode
+#     return Gs, Zs, reals, NoiseAmp
 
 
 def generate_in2coarsest(reals, scale_v, scale_h, opt):
@@ -269,44 +281,35 @@ def generate_in2coarsest(reals, scale_v, scale_h, opt):
         in_s = upsampling(real_down, real_down.shape[2], real_down.shape[3])
     return in_s
 
+class Logger(object):
+    def __init__(self, log_path):
+        self.terminal = sys.stdout
+        self.log = open(log_path, 'a+')
 
-def generate_dir2save(opt):
-    dir2save = None
-    if (opt.mode == 'train') | (opt.mode == 'SR_train'):
-        dir2save = 'TrainedModels/%s/scale_factor=%f,alpha=%d' % (opt.input_name[:-4], opt.scale_factor_init, opt.alpha)
-    elif (opt.mode == 'animation_train'):
-        dir2save = 'TrainedModels/%s/scale_factor=%f_noise_padding' % (opt.input_name[:-4], opt.scale_factor_init)
-    elif (opt.mode == 'paint_train'):
-        dir2save = 'TrainedModels/%s/scale_factor=%f_paint/start_scale=%d' % (opt.input_name[:-4], opt.scale_factor_init, opt.paint_start_scale)
-    elif opt.mode == 'random_samples':
-        dir2save = '%s/RandomSamples/%s/gen_start_scale=%d' % (opt.out, opt.input_name[:-4], opt.gen_start_scale)
-    elif opt.mode == 'random_samples_arbitrary_sizes':
-        dir2save = '%s/RandomSamples_ArbitrerySizes/%s/scale_v=%f_scale_h=%f' % (opt.out, opt.input_name[:-4], opt.scale_v, opt.scale_h)
-    elif opt.mode == 'animation':
-        dir2save = '%s/Animation/%s' % (opt.out, opt.input_name[:-4])
-    elif opt.mode == 'SR':
-        dir2save = '%s/SR/%s' % (opt.out, opt.sr_factor)
-    elif opt.mode == 'harmonization':
-        dir2save = '%s/Harmonization/%s/%s_out' % (opt.out, opt.input_name[:-4], opt.ref_name[:-4])
-    elif opt.mode == 'editing':
-        dir2save = '%s/Editing/%s/%s_out' % (opt.out, opt.input_name[:-4], opt.ref_name[:-4])
-    elif opt.mode == 'paint2image':
-        dir2save = '%s/Paint2image/%s/%s_out' % (opt.out, opt.input_name[:-4], opt.ref_name[:-4])
-        if opt.quantization_flag:
-            dir2save = '%s_quantized' % dir2save
-    return dir2save
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        #this flush method is needed for python 3 compatibility.
+        #this handles the flush command by doing nothing.
+        #you might want to specify some extra behavior here.
+        self.log.flush()
 
 
 def post_config(opt):
     # init fixed parameters
     opt.device = torch.device("cpu" if opt.not_cuda else "cuda:0")
-    opt.niter_init = opt.niter
-    opt.noise_amp_init = opt.noise_amp
+    opt.out_ = 'TrainedModels/%s' % datetime.datetime.now().strftime('%d-%m-%Y::%H:%M:%S')
+    try:
+        os.makedirs(opt.out_)
+    except OSError:
+        pass
+    opt.logger = Logger(os.path.join(opt.out_, 'log.txt'))
+    sys.stdout = opt.logger
     opt.nfc_init = opt.nfc
     opt.min_nfc_init = opt.min_nfc
     opt.scale_factor_init = opt.scale_factor
-    opt.input_name = 'balloons.png'
-    opt.out_ = 'TrainedModels/%s/scale_factor=%f/' % (opt.input_name[:-4], opt.scale_factor)
     if opt.mode == 'SR':
         opt.alpha = 100
 

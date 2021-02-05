@@ -5,7 +5,6 @@ from data import CreateSrcDataLoader
 from data import CreateTrgDataLoader
 import SinGAN.functions as functions
 
-
 if __name__ == '__main__':
     parser = get_arguments()
     parser.add_argument('--input_dir', help='input image dir', default='Input/Images')
@@ -14,30 +13,24 @@ if __name__ == '__main__':
     opt = functions.post_config(opt)
 
     opt.batch_size = len(opt.gpus)*2
+    opt.curr_scale = 0
     source_loader, target_loader = CreateSrcDataLoader(opt), CreateTrgDataLoader(opt)
-    opt.era_size = np.maximum(len(target_loader.dataset), len(source_loader.dataset))
+    opt.epoch_size = np.maximum(len(target_loader.dataset), len(source_loader.dataset))
 
-    source_loaders, target_loaders =[], []
+    source_loaders, target_loaders, num_epochs =[], [], []
     for i in range(opt.num_scales+1):
-        if i>5:
+        if i>8:
             opt.batch_size = len(opt.gpus)
+        opt.curr_scale = i
         source_loader, target_loader = CreateSrcDataLoader(opt), CreateTrgDataLoader(opt)
-        source_loader.dataset.SetEraSize(opt.era_size)
-        target_loader.dataset.SetEraSize(opt.era_size)
+        source_loader.dataset.SetEpochSize(opt.epoch_size)
+        target_loader.dataset.SetEpochSize(opt.epoch_size)
         source_loaders.append(source_loader)
         target_loaders.append(target_loader)
-
 
     opt.source_loaders = source_loaders
     opt.target_loaders = target_loaders
 
-    dir2save = functions.generate_dir2save(opt)
-    try:
-        os.makedirs(dir2save)
-    except OSError:
-        pass
-
-    real = functions.read_image(opt)
     functions.adjust_scales2image(H, W, opt)
     train(opt)
     print('Finished Training.')

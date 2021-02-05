@@ -42,11 +42,11 @@ def get_arguments():
 
 
     # optimization hyper parameters:
-    parser.add_argument('--niter', type=int, default=2000, help='number of epochs to train per scale')
+    parser.add_argument('--num_steps', type=int, default=1e5, help='number of steps to train per scale')
     parser.add_argument('--gamma', type=float, help='scheduler gamma', default=0.1)
     parser.add_argument('--lr_g', type=float, default=0.0005, help='learning rate, default=0.0005')
     parser.add_argument('--lr_d', type=float, default=0.0005, help='learning rate, default=0.0005')
-    parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
+    parser.add_argument('--beta1', type=float, default=0.9, help='beta1 for adam. default=0.9')
     parser.add_argument('--Gsteps', type=int, help='Generator inner steps', default=3)
     parser.add_argument('--Dsteps', type=int, help='Discriminator inner steps', default=3)
     parser.add_argument('--lambda_grad', type=float, help='gradient penelty weight', default=0.1)

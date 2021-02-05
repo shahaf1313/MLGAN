@@ -5,7 +5,10 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data
 import math
+import numpy as np
+import time
 from SinGAN.imresize import imresize
+from SinGAN.functions import imresize_torch
 import datetime
 from torch.utils.tensorboard import SummaryWriter
 
@@ -20,7 +23,6 @@ def train(opt):
         opt.nfc = min(opt.nfc_init * pow(2, math.floor(scale_num / 4)), 128)
         opt.min_nfc = min(opt.min_nfc_init * pow(2, math.floor(scale_num / 4)), 128)
 
-        opt.out_ = functions.generate_dir2save(opt)
         opt.outf = '%s/%d' % (opt.out_, scale_num)
         try:
             os.makedirs(opt.outf)
@@ -72,87 +74,98 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
         schedulerDts = torch.optim.lr_scheduler.MultiStepLR(optimizer=optimizerDts, milestones=[1600], gamma=opt.gamma)
         schedulerGts = torch.optim.lr_scheduler.MultiStepLR(optimizer=optimizerGts, milestones=[1600], gamma=opt.gamma)
 
+        pad_noise = int(((opt.ker_size - 1) * opt.num_layer) / 2)
+        pad_image = int(((opt.ker_size - 1) * opt.num_layer) / 2)
+        m_noise = nn.ZeroPad2d(int(pad_noise))
+        m_image = nn.ZeroPad2d(int(pad_image))
+
         discriminator_steps = 0
         generator_steps = 0
-        for batch_num, ((src_img, src_lbl, src_shapes, src_names), (trg_img, trg_lbl, trg_shapes, trg_names)) in enumerate(zip(opt.source_loaders[opt.curr_scale], opt.target_loaders[opt.curr_scale])):
-            # if batch_num > 3:
-            #     break
-            source_scales = functions.creat_reals_pyramid(src_img, opt)
-            target_scales = functions.creat_reals_pyramid(trg_img, opt)
+        steps = 0
+        epoch_num = 1
+        start = time.time()
+        keep_training = True
 
-            pad_noise = int(((opt.ker_size - 1) * opt.num_layer) / 2)
-            pad_image = int(((opt.ker_size - 1) * opt.num_layer) / 2)
-            m_noise = nn.ZeroPad2d(int(pad_noise))
-            m_image = nn.ZeroPad2d(int(pad_image))
+        while keep_training:
+            print('scale %d: starting epoch %d...' % (opt.curr_scale, epoch_num))
+            for batch_num, (source_scales, target_scales) in enumerate(zip(opt.source_loaders[opt.curr_scale], opt.target_loaders[opt.curr_scale])):
+                if steps > opt.num_steps:
+                    keep_training = False
+                    break
 
-            ############################
-            # (1) Update D networks: maximize D(x) + D(G(z))
-            ###########################
-            fake_sit, fake_tis = None, None
-            for j in range(opt.Dsteps):
-                #train discriminator networks between domains (S->T, T->S)
+                for i in range(len(source_scales)):
+                    source_scales[i] = source_scales[i].to(opt.device)
+                    target_scales[i] = target_scales[i].to(opt.device)
 
-                #S -> T:
-                real_images = target_scales[opt.curr_scale]
-                D_x, D_G_z, errD = adversarial_disciriminative_train(netDst, optimizerDst, netGst, Gst, real_images, source_scales, m_noise, m_image, opt)
-                opt.tb.add_scalar('Scale%d/ST/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_steps)
-                opt.tb.add_scalar('Scale%d/ST/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_steps)
-                opt.tb.add_scalar('Scale%d/ST/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_steps)
+                ############################
+                # (1) Update D networks: maximize D(x) + D(G(z))
+                ###########################
+                fake_sit, fake_tis = None, None
+                for j in range(opt.Dsteps):
+                    #train discriminator networks between domains (S->T, T->S)
+
+                    #S -> T:
+                    real_images = target_scales[opt.curr_scale]
+                    D_x, D_G_z, errD = adversarial_disciriminative_train(netDst, optimizerDst, netGst, Gst, real_images, source_scales, m_noise, m_image, opt)
+                    opt.tb.add_scalar('Scale%d/ST/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_steps)
+                    opt.tb.add_scalar('Scale%d/ST/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_steps)
+                    opt.tb.add_scalar('Scale%d/ST/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_steps)
 
 
-                # T -> S:
-                real_images = source_scales[opt.curr_scale]
-                D_x, D_G_z, errD = adversarial_disciriminative_train(netDts, optimizerDts, netGts, Gts, real_images, target_scales, m_noise, m_image, opt)
-                opt.tb.add_scalar('Scale%d/TS/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_steps)
-                opt.tb.add_scalar('Scale%d/TS/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_steps)
-                opt.tb.add_scalar('Scale%d/TS/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_steps)
+                    # T -> S:
+                    real_images = source_scales[opt.curr_scale]
+                    D_x, D_G_z, errD = adversarial_disciriminative_train(netDts, optimizerDts, netGts, Gts, real_images, target_scales, m_noise, m_image, opt)
+                    opt.tb.add_scalar('Scale%d/TS/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_steps)
+                    opt.tb.add_scalar('Scale%d/TS/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_steps)
+                    opt.tb.add_scalar('Scale%d/TS/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_steps)
 
-                discriminator_steps += 1
+                    discriminator_steps += 1
 
-            ############################
-            # (2) Update G networks: maximize D(G(z)), minimize Gst(Gts(s))-s and vice versa
-            ###########################
+                ############################
+                # (2) Update G networks: maximize D(G(z)), minimize Gst(Gts(s))-s and vice versa
+                ###########################
 
-            for j in range(opt.Gsteps):
-                # train generator networks between domains (S->T, T->S)
+                for j in range(opt.Gsteps):
+                    # train generator networks between domains (S->T, T->S)
 
-                # S -> T:
-                errG, fake_sit = adversarial_generative_train(netGst, optimizerGst, netDst, Gst, source_scales, m_noise, m_image, opt)
-                opt.tb.add_scalar('Scale%d/ST/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
+                    # S -> T:
+                    errG, fake_sit = adversarial_generative_train(netGst, optimizerGst, netDst, Gst, source_scales, m_noise, m_image, opt)
+                    opt.tb.add_scalar('Scale%d/ST/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
 
-                # T -> S:
-                errG, fake_tis = adversarial_generative_train(netGts, optimizerGts, netDts, Gts, target_scales, m_noise, m_image, opt)
-                opt.tb.add_scalar('Scale%d/TS/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
+                    # T -> S:
+                    errG, fake_tis = adversarial_generative_train(netGts, optimizerGts, netDts, Gts, target_scales, m_noise, m_image, opt)
+                    opt.tb.add_scalar('Scale%d/TS/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
 
-                # Identity Loss:
-                loss_x, loss_y, loss_id = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, Gst,
-                                                                 netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, Gts,
-                                                                 m_image, m_noise, opt)
-                opt.tb.add_scalar('Scale%d/Identity/LossX' % opt.curr_scale, loss_x.item(), generator_steps)
-                opt.tb.add_scalar('Scale%d/Identity/LossY' % opt.curr_scale, loss_y.item(), generator_steps)
-                opt.tb.add_scalar('Scale%d/Identity/Loss' % opt.curr_scale, loss_id.item(), generator_steps)
+                    # Identity Loss:
+                    loss_x, loss_y, loss_id = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, Gst,
+                                                                     netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, Gts,
+                                                                     m_image, m_noise, opt)
+                    opt.tb.add_scalar('Scale%d/Identity/LossX' % opt.curr_scale, loss_x.item(), generator_steps)
+                    opt.tb.add_scalar('Scale%d/Identity/LossY' % opt.curr_scale, loss_y.item(), generator_steps)
+                    opt.tb.add_scalar('Scale%d/Identity/Loss' % opt.curr_scale, loss_id.item(), generator_steps)
 
-                generator_steps += 1
+                    generator_steps += 1
 
-            if (batch_num + 1) % 25 == 0 or batch_num == 0:
-                print('scale %d:[%d/%d]' % (opt.curr_scale, batch_num + 1, len(opt.source_loaders[opt.curr_scale])))
+                new_steps = np.minimum(generator_steps, discriminator_steps)
+                if (int(new_steps/25) - int(steps/25)) or steps == 0:
+                    print('scale %d:[%d/%d]' % (opt.curr_scale, 25*int(new_steps/25 - (1 if steps == 0 else 0)), opt.num_steps))
 
-            if (batch_num + 1) % 250 == 0 or batch_num == 0:
-                opt.tb.add_image('Scale%d/fake_sit' % opt.curr_scale, (fake_sit[0] + 1) / 2, batch_num + 1)
-                opt.tb.add_image('Scale%d/fake_tis' % opt.curr_scale, (fake_tis[0] + 1) / 2, batch_num + 1)
-                opt.tb.add_image('Scale%d/source' % opt.curr_scale, (source_scales[opt.curr_scale][0] + 1) / 2, batch_num + 1)
-                opt.tb.add_image('Scale%d/target' % opt.curr_scale, (target_scales[opt.curr_scale][0] + 1) / 2, batch_num + 1)
-                # plt.imsave('%s/D_fake.png'   % (opt.outf), functions.convert_image_np(D_fake_map))
-                # plt.imsave('%s/D_real.png'   % (opt.outf), functions.convert_image_np(D_real_map))
-                # plt.imsave('%s/z_opt.png'    % (opt.outf), functions.convert_image_np(z_opt.detach()), vmin=0, vmax=1)
-                # plt.imsave('%s/prev.png'     %  (opt.outf), functions.convert_image_np(prev), vmin=0, vmax=1)
-                # plt.imsave('%s/noise.png'    %  (opt.outf), functions.convert_image_np(noise), vmin=0, vmax=1)
-                # plt.imsave('%s/z_prev.png'   % (opt.outf), functions.convert_image_np(z_prev), vmin=0, vmax=1)
+                if (int(new_steps/250) - int(steps/250)) or steps == 0:
+                    if steps > 0:
+                        elapsed = time.time() - start
+                        print('scale %d: elapsed time = %.2f secs per step' % (opt.curr_scale, elapsed/250))
+                        start = time.time()
+                    opt.tb.add_image('Scale%d/fake_sit' % opt.curr_scale, (fake_sit[0] + 1) / 2, int(steps/250))
+                    opt.tb.add_image('Scale%d/fake_tis' % opt.curr_scale, (fake_tis[0] + 1) / 2, int(steps/250))
+                    opt.tb.add_image('Scale%d/source' % opt.curr_scale, (source_scales[opt.curr_scale][0] + 1) / 2, int(steps/250))
+                    opt.tb.add_image('Scale%d/target' % opt.curr_scale, (target_scales[opt.curr_scale][0] + 1) / 2, int(steps/250))
 
-            schedulerDst.step()
-            schedulerGst.step()
-            schedulerDts.step()
-            schedulerGts.step()
+                steps = new_steps
+
+                schedulerDst.step()
+                schedulerGst.step()
+                schedulerDts.step()
+                schedulerGts.step()
 
         opt.tb.close()
         if (len(opt.gpus) > 1):
@@ -192,7 +205,7 @@ def adversarial_disciriminative_train(netD, optimizerD, netG, Gs, real_images, f
 def adversarial_generative_train(netG, optimizerG, netD, Gs, from_scales, m_noise, m_image, opt):
     netG.zero_grad()
 
-    ##I added!
+    ##todo: I added!
     # train with fake
     prev = concat_pyramid(Gs, from_scales, m_noise, m_image, opt)
     prev = m_image(prev)
@@ -219,31 +232,28 @@ def cycle_consistency_loss(netGx, optimizerGx, x, x_scales, Xs, netGy, optimizer
     optimizerGx.zero_grad()
     optimizerGy.zero_grad()
 
-    #Gy(x):
     prev_x = concat_pyramid(Xs, x_scales, m_noise, m_image, opt)
     prev_x = m_image(prev_x)
+    prev_y = concat_pyramid(Ys, y_scales, m_noise, m_image, opt)
+    prev_y = m_image(prev_y)
+
+    #Gy(x):
     curr_x = m_noise(x_scales[opt.curr_scale])
-    Gy_x = netGy(curr_x, prev_x)
+    Gy_x = netGx(curr_x, prev_x)
 
     #Gx(Gy(x)):
-    prev_yx = concat_pyramid(Ys, y_scales, m_noise, m_image, opt)
-    prev_yx = m_image(prev_yx)
     curr_yx = m_noise(Gy_x)
-    Gx_Gy_x = netGx(curr_yx, prev_yx)
+    Gx_Gy_x = netGy(curr_yx, prev_y)
     loss_x = opt.idx * criterion(Gx_Gy_x, x)
     loss_x.backward()
 
     # Gx(y):
-    prev_y = concat_pyramid(Ys, y_scales, m_noise, m_image, opt)
-    prev_y = m_image(prev_y)
     curr_y = m_noise(y_scales[opt.curr_scale])
-    Gx_y = netGx(curr_y, prev_y)
+    Gx_y = netGy(curr_y, prev_y)
 
     # Gy(Gx(y)):
-    prev_xy = concat_pyramid(Xs, x_scales, m_noise, m_image, opt)
-    prev_xy = m_image(prev_xy)
     curr_xy = m_noise(Gx_y)
-    Gy_Gx_y = netGx(curr_xy, prev_xy)
+    Gy_Gx_y = netGx(curr_xy, prev_x)
     loss_y = opt.idy * criterion(Gy_Gx_y, y)
     loss_y.backward()
 
@@ -264,7 +274,8 @@ def concat_pyramid(Gs, sources, m_noise, m_image, opt):
         source_curr = m_noise(source_curr)
         G_z = m_image(G_z)
         G_z = G(source_curr, G_z.detach())
-        G_z = imresize(G_z, 1 / opt.scale_factor, opt)
+        # G_z = imresize(G_z, 1 / opt.scale_factor, opt)
+        G_z = imresize_torch(G_z, 1 / opt.scale_factor, opt)
         G_z = G_z[:, :, 0:source_next.shape[2], 0:source_next.shape[3]]
         count += 1
     return G_z
