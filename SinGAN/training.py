@@ -88,6 +88,7 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
 
         while keep_training:
             print('scale %d: starting epoch %d...' % (opt.curr_scale, epoch_num))
+            epoch_num += 1
             for batch_num, (source_scales, target_scales) in enumerate(zip(opt.source_loaders[opt.curr_scale], opt.target_loaders[opt.curr_scale])):
                 if steps > opt.num_steps:
                     keep_training = False
