@@ -147,18 +147,18 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                     generator_steps += 1
 
                 new_steps = np.minimum(generator_steps, discriminator_steps)
-                if (int(new_steps/25) - int(steps/25)) or steps == 0:
-                    print('scale %d:[%d/%d]' % (opt.curr_scale, 25*int(new_steps/25 - (1 if steps == 0 else 0)), opt.num_steps))
+                if (int(new_steps/opt.print_rate) - int(steps/opt.print_rate)) or steps == 0:
+                    print('scale %d:[%d/%d]' % (opt.curr_scale, opt.print_rate*int(new_steps/opt.print_rate - (1 if steps == 0 else 0)), opt.num_steps))
 
-                if (int(new_steps/250) - int(steps/250)) or steps == 0:
+                if (int(new_steps/opt.save_pics_rate) - int(steps/opt.save_pics_rate)) or steps == 0:
                     if steps > 0:
                         elapsed = time.time() - start
-                        print('scale %d: elapsed time = %.2f secs per step' % (opt.curr_scale, elapsed/250))
+                        print('scale %d: elapsed time = %.2f secs per step' % (opt.curr_scale, elapsed/opt.save_pics_rate))
                         start = time.time()
-                    opt.tb.add_image('Scale%d/fake_sit' % opt.curr_scale, (fake_sit[0] + 1) / 2, int(steps/250))
-                    opt.tb.add_image('Scale%d/fake_tis' % opt.curr_scale, (fake_tis[0] + 1) / 2, int(steps/250))
-                    opt.tb.add_image('Scale%d/source' % opt.curr_scale, (source_scales[opt.curr_scale][0] + 1) / 2, int(steps/250))
-                    opt.tb.add_image('Scale%d/target' % opt.curr_scale, (target_scales[opt.curr_scale][0] + 1) / 2, int(steps/250))
+                    opt.tb.add_image('Scale%d/fake_sit' % opt.curr_scale, (fake_sit[0] + 1) / 2, int(steps/opt.save_pics_rate))
+                    opt.tb.add_image('Scale%d/fake_tis' % opt.curr_scale, (fake_tis[0] + 1) / 2, int(steps/opt.save_pics_rate))
+                    opt.tb.add_image('Scale%d/source' % opt.curr_scale, (source_scales[opt.curr_scale][0] + 1) / 2, int(steps/opt.save_pics_rate))
+                    opt.tb.add_image('Scale%d/target' % opt.curr_scale, (target_scales[opt.curr_scale][0] + 1) / 2, int(steps/opt.save_pics_rate))
 
                 steps = new_steps
 

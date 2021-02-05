@@ -57,6 +57,9 @@ def get_arguments():
 
     # Miscellaneous parameters:
     parser.add_argument("--tb_logs_dir", type=str, required=False, default='./runs', help="Path to Tensorboard logs dir.")
-    parser.add_argument("--checkpoints_dir", type=str, required=False, default='./checkpoints', help="Where to save snapshots of the model.")
+    parser.add_argument("--checkpoints_dir", type=str, required=False, default='./TrainedModels', help="Where to save snapshots of the model.")
+    parser.add_argument("--print_rate", type=str, required=False, default=50, help="Print progress to screen every x iterations")
+    parser.add_argument("--save_pics_rate", type=str, required=False, default=1000, help="Save images to tb every x iterations")
+
 
     return parser
