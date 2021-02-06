@@ -82,6 +82,8 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
         discriminator_steps = 0
         generator_steps = 0
         steps = 0
+        print_int = 0
+        save_pics_int = 0
         epoch_num = 1
         start = time.time()
         keep_training = True
@@ -147,21 +149,22 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
 
                     generator_steps += 1
 
-                new_steps = np.minimum(generator_steps, discriminator_steps)
-                if (int(new_steps/opt.print_rate) - int(steps/opt.print_rate)) or steps == 0:
-                    print('scale %d:[%d/%d]' % (opt.curr_scale, opt.print_rate*int(new_steps/opt.print_rate - (1 if steps == 0 else 0)), opt.num_steps))
+                if int(steps/opt.print_rate) > print_int or steps == 0:
+                    print('scale %d:[%d/%d]' % (opt.curr_scale, print_int*opt.print_rate, opt.num_steps))
+                    print_int += 1
 
-                if (int(new_steps/opt.save_pics_rate) - int(steps/opt.save_pics_rate)) or steps == 0:
+                if int(steps/opt.save_pics_rate) > save_pics_int or steps == 0:
                     if steps > 0:
                         elapsed = time.time() - start
                         print('scale %d: elapsed time = %.2f secs per step' % (opt.curr_scale, elapsed/opt.save_pics_rate))
                         start = time.time()
-                    opt.tb.add_image('Scale%d/fake_sit' % opt.curr_scale, (fake_sit[0] + 1) / 2, int(steps/opt.save_pics_rate))
-                    opt.tb.add_image('Scale%d/fake_tis' % opt.curr_scale, (fake_tis[0] + 1) / 2, int(steps/opt.save_pics_rate))
-                    opt.tb.add_image('Scale%d/source' % opt.curr_scale, (source_scales[opt.curr_scale][0] + 1) / 2, int(steps/opt.save_pics_rate))
-                    opt.tb.add_image('Scale%d/target' % opt.curr_scale, (target_scales[opt.curr_scale][0] + 1) / 2, int(steps/opt.save_pics_rate))
+                    opt.tb.add_image('Scale%d/fake_sit' % opt.curr_scale, (fake_sit[0] + 1) / 2, save_pics_int*opt.save_pics_rate)
+                    opt.tb.add_image('Scale%d/fake_tis' % opt.curr_scale, (fake_tis[0] + 1) / 2, save_pics_int*opt.save_pics_rate)
+                    opt.tb.add_image('Scale%d/source' % opt.curr_scale, (source_scales[opt.curr_scale][0] + 1) / 2, save_pics_int*opt.save_pics_rate)
+                    opt.tb.add_image('Scale%d/target' % opt.curr_scale, (target_scales[opt.curr_scale][0] + 1) / 2, save_pics_int*opt.save_pics_rate)
+                    save_pics_int += 1
 
-                steps = new_steps
+                steps = np.minimum(generator_steps, discriminator_steps)
 
                 schedulerDst.step()
                 schedulerGst.step()
