@@ -26,8 +26,11 @@ def get_arguments():
 
     # networks hyper parameters:
     parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument("--batch_size_list", type=int, nargs='+', help="batch size in each one of the scales", default=[0])
+    parser.add_argument('--norm_type', type=str, default='batch_norm')
+    parser.add_argument('--bias_in_tail', default=False, action='store_true')
+    parser.add_argument('--no_bias_in_tail', dest='bias_in_tail', action='store_false')
     parser.add_argument('--nfc', type=int, default=8)
-    parser.add_argument('--min_nfc', type=int, default=8)
     parser.add_argument('--ker_size', type=int, help='kernel size', default=3)
     parser.add_argument('--num_layer', type=int, help='number of layers', default=5)
     parser.add_argument('--stride', help='stride', default=1)
@@ -44,8 +47,8 @@ def get_arguments():
     # optimization hyper parameters:
     parser.add_argument('--num_steps', type=int, default=1e5, help='number of steps to train per scale')
     parser.add_argument('--gamma', type=float, help='scheduler gamma', default=0.1)
-    parser.add_argument('--lr_g', type=float, default=0.0005, help='learning rate, default=0.0005')
-    parser.add_argument('--lr_d', type=float, default=0.0005, help='learning rate, default=0.0005')
+    parser.add_argument('--lr_g', type=float, default=0.00025, help='learning rate, default=0.00025')
+    parser.add_argument('--lr_d', type=float, default=0.00025, help='learning rate, default=0.00025')
     parser.add_argument('--beta1', type=float, default=0.9, help='beta1 for adam. default=0.9')
     parser.add_argument('--Gsteps', type=int, help='Generator inner steps', default=3)
     parser.add_argument('--Dsteps', type=int, help='Discriminator inner steps', default=3)
@@ -58,8 +61,8 @@ def get_arguments():
     # Miscellaneous parameters:
     parser.add_argument("--tb_logs_dir", type=str, required=False, default='./runs', help="Path to Tensorboard logs dir.")
     parser.add_argument("--checkpoints_dir", type=str, required=False, default='./TrainedModels', help="Where to save snapshots of the model.")
-    parser.add_argument("--print_rate", type=str, required=False, default=50, help="Print progress to screen every x iterations")
-    parser.add_argument("--save_pics_rate", type=str, required=False, default=1000, help="Save images to tb every x iterations")
+    parser.add_argument("--print_rate", type=int, required=False, default=100, help="Print progress to screen every x iterations")
+    parser.add_argument("--save_pics_rate", type=int, required=False, default=1000, help="Save images to tb every x iterations")
 
 
     return parser

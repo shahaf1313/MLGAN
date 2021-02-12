@@ -135,19 +135,21 @@ def move_to_cpu(t):
     return t
 
 def imresize_torch(image_batch, scale, opt):
-    to_pil = transforms.ToPILImage()
-    to_torch = transforms.PILToTensor()
-    resized_batch = None
-    for k in range(image_batch.shape[0]):
-        pil_im = to_pil(image_batch[k])
-        new_size = (np.ceil(scale * np.array(pil_im.size))).astype(np.int)
-        new_image = pil_im.resize(new_size, Image.BICUBIC)
-        new_image = to_torch(new_image)
-        if resized_batch is None:
-            resized_batch = new_image.unsqueeze(0)
-        else:
-            resized_batch = torch.cat((resized_batch, new_image.unsqueeze(0)), 0)
-    return resized_batch.to(opt.device)
+    new_size = np.ceil(scale * np.array([image_batch.shape[2], image_batch.shape[3]])).astype(np.int)
+    return nn.functional.interpolate(image_batch, size=(new_size[0], new_size[1]), mode='bicubic')
+    # to_pil = transforms.ToPILImage()
+    # to_torch = transforms.PILToTensor()
+    # resized_batch = None
+    # for k in range(image_batch.shape[0]):
+    #     pil_im = to_pil(image_batch[k])
+    #     new_size = (np.ceil(scale * np.array(pil_im.size))).astype(np.int)
+    #     new_image = pil_im.resize(new_size, Image.BICUBIC)
+    #     new_image = to_torch(new_image)
+    #     if resized_batch is None:
+    #         resized_batch = new_image.unsqueeze(0)
+    #     else:
+    #         resized_batch = torch.cat((resized_batch, new_image.unsqueeze(0)), 0)
+    # return resized_batch.to(opt.device)
 
 def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA, device):
     # print real_data.size()
@@ -308,6 +310,7 @@ def post_config(opt):
     opt.logger = Logger(os.path.join(opt.out_, 'log.txt'))
     sys.stdout = opt.logger
     opt.nfc_init = opt.nfc
+    opt.min_nfc = opt.nfc
     opt.min_nfc_init = opt.min_nfc
     opt.scale_factor_init = opt.scale_factor
     if opt.mode == 'SR':

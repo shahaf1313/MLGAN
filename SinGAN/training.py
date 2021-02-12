@@ -17,6 +17,7 @@ def train(opt):
     nfc_prev = 0
     Gst, Gts = [], []
     Dst, Dts = [], []
+    opt.tb = SummaryWriter('./runs/%sGPU%d/' % (datetime.datetime.now().strftime('%d-%m-%Y::%H:%M:%S'), opt.gpus[0]))
 
     while scale_num < opt.stop_scale + 1:
         opt.curr_scale = scale_num
@@ -59,10 +60,10 @@ def train(opt):
         scale_num += 1
         nfc_prev = opt.nfc
         del Dst_curr, Gst_curr, Dts_curr, Gts_curr
+    opt.tb.close()
     return
 
 def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst: list, Dts: list, opt):
-        opt.tb = SummaryWriter('./runs/scale%d/%s' % (opt.curr_scale, datetime.datetime.now().strftime('%d-%m-%Y::%H:%M:%S')))
         # setup optimizers and schedulers:
         optimizerDst = optim.Adam(netDst.parameters(), lr=opt.lr_d, betas=(opt.beta1, 0.999))
         optimizerGst = optim.Adam(netGst.parameters(), lr=opt.lr_g, betas=(opt.beta1, 0.999))
@@ -149,15 +150,14 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
 
                     generator_steps += 1
 
-                if int(steps/opt.print_rate) > print_int or steps == 0:
-                    print('scale %d:[%d/%d]' % (opt.curr_scale, print_int*opt.print_rate, opt.num_steps))
+                if int(steps/opt.print_rate) >= print_int or steps == 0:
+                    elapsed = time.time() - start
+                    print('scale %d:[%d/%d] ; elapsed time = %.2f secs per step' %
+                          (opt.curr_scale, print_int*opt.print_rate, opt.num_steps, elapsed/opt.print_rate))
+                    start = time.time()
                     print_int += 1
 
-                if int(steps/opt.save_pics_rate) > save_pics_int or steps == 0:
-                    if steps > 0:
-                        elapsed = time.time() - start
-                        print('scale %d: elapsed time = %.2f secs per step' % (opt.curr_scale, elapsed/opt.save_pics_rate))
-                        start = time.time()
+                if int(steps/opt.save_pics_rate) >= save_pics_int or steps == 0:
                     opt.tb.add_image('Scale%d/fake_sit' % opt.curr_scale, (fake_sit[0] + 1) / 2, save_pics_int*opt.save_pics_rate)
                     opt.tb.add_image('Scale%d/fake_tis' % opt.curr_scale, (fake_tis[0] + 1) / 2, save_pics_int*opt.save_pics_rate)
                     opt.tb.add_image('Scale%d/source' % opt.curr_scale, (source_scales[opt.curr_scale][0] + 1) / 2, save_pics_int*opt.save_pics_rate)
@@ -166,12 +166,11 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
 
                 steps = np.minimum(generator_steps, discriminator_steps)
 
-                schedulerDst.step()
-                schedulerGst.step()
-                schedulerDts.step()
-                schedulerGts.step()
+                # schedulerDst.step()
+                # schedulerGst.step()
+                # schedulerDts.step()
+                # schedulerGts.step()
 
-        opt.tb.close()
         if (len(opt.gpus) > 1):
             functions.save_networks(netDst.module, netGst.module, netDts.module, netGts.module, opt)
             return netDst.module, netGst.module, netDts.module, netGts.module
@@ -286,7 +285,7 @@ def concat_pyramid(Gs, sources, m_noise, m_image, opt):
 
 def init_models(opt):
     # generator initialization:
-    netG = models.GeneratorConcatSkip2CleanAdd(opt).to(opt.device)
+    netG = models.Generator(opt).to(opt.device)
     netG.apply(models.weights_init)
     if opt.netG != '':
         netG.load_state_dict(torch.load(opt.netG))
