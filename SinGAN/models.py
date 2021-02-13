@@ -10,6 +10,8 @@ class ConvBlock(nn.Sequential):
             self.add_module('norm',nn.BatchNorm2d(out_channel))
         elif norm_type == 'instance_norm':
             self.add_module('norm',nn.InstanceNorm2d(out_channel,affine=True))
+        elif norm_type=='dropout':
+            self.add_module('do', nn.Dropout(0.5))
         self.add_module('LeakyRelu',nn.LeakyReLU(0.2, inplace=True))
 
 def weights_init(m):
