@@ -116,16 +116,14 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                     #train discriminator networks between domains (S->T, T->S)
 
                     #S -> T:
-                    real_images = target_scales[opt.curr_scale]
-                    D_x, D_G_z, errD = adversarial_disciriminative_train(netDst, optimizerDst, netGst, prev_sit, real_images, source_scales, m_noise, opt)
+                    D_x, D_G_z, errD = adversarial_disciriminative_train(netDst, optimizerDst, netGst, prev_sit, target_scales[opt.curr_scale], source_scales, m_noise, opt)
                     opt.tb.add_scalar('Scale%d/ST/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_steps)
                     opt.tb.add_scalar('Scale%d/ST/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_steps)
                     opt.tb.add_scalar('Scale%d/ST/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_steps)
 
 
                     # T -> S:
-                    real_images = source_scales[opt.curr_scale]
-                    D_x, D_G_z, errD = adversarial_disciriminative_train(netDts, optimizerDts, netGts, prev_tis, real_images, target_scales, m_noise, opt)
+                    D_x, D_G_z, errD = adversarial_disciriminative_train(netDts, optimizerDts, netGts, prev_tis, source_scales[opt.curr_scale], target_scales, m_noise, opt)
                     opt.tb.add_scalar('Scale%d/TS/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_steps)
                     opt.tb.add_scalar('Scale%d/TS/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_steps)
                     opt.tb.add_scalar('Scale%d/TS/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_steps)
@@ -148,11 +146,14 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                     opt.tb.add_scalar('Scale%d/TS/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
 
                     # Identity Loss:
+                    # (netGx, optimizerGx, x, x_scales, prev_x,
+                    #  netGy, optimizerGy, y, y_scales, prev_y,
+                    #  m_noise, opt)
                     loss_x, loss_y, loss_id, images = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, prev_sit,
-                                                                     netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, prev_tis,
-                                                                     m_noise, opt)
-                    opt.tb.add_scalar('Scale%d/Identity/LossX' % opt.curr_scale, loss_x.item(), generator_steps)
-                    opt.tb.add_scalar('Scale%d/Identity/LossY' % opt.curr_scale, loss_y.item(), generator_steps)
+                                                                             netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, prev_tis,
+                                                                             m_noise, opt)
+                    opt.tb.add_scalar('Scale%d/Identity/LossSTS' % opt.curr_scale, loss_x.item(), generator_steps)
+                    opt.tb.add_scalar('Scale%d/Identity/LossTST' % opt.curr_scale, loss_y.item(), generator_steps)
                     opt.tb.add_scalar('Scale%d/Identity/Loss' % opt.curr_scale, loss_id.item(), generator_steps)
 
                     generator_steps += 1

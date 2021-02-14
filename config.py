@@ -28,6 +28,7 @@ def get_arguments():
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument("--batch_size_list", type=int, nargs='+', help="batch size in each one of the scales", default=[0])
     parser.add_argument('--norm_type', type=str, default='batch_norm')
+    parser.add_argument('--do_keep_prob', type=float, default=0.5)
     parser.add_argument('--bias_in_tail', default=False, action='store_true')
     parser.add_argument('--no_bias_in_tail', dest='bias_in_tail', action='store_false')
     parser.add_argument('--nfc', type=int, default=8)
@@ -38,7 +39,6 @@ def get_arguments():
 
     # pyramid parameters:
     parser.add_argument('--scale_factor', type=float, help='pyramid scale factor', default=0.75)  # pow(0.5,1/6))
-    parser.add_argument('--noise_amp', type=float, help='addative noise cont weight', default=0.1)
     parser.add_argument('--min_size', type=int, help='image minimal size at the coarser scale', default=None)
     parser.add_argument('--max_size', type=int, help='image maximal size at the largest scale', default=None)
     parser.add_argument('--num_scales', type=int, help='number of scales in the pyramid', default=None)
