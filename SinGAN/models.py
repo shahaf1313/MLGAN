@@ -11,7 +11,7 @@ class ConvBlock(nn.Sequential):
         elif norm_type == 'instance_norm':
             self.add_module('norm',nn.InstanceNorm2d(out_channel,affine=True))
         elif norm_type=='dropout':
-            self.add_module('do', nn.Dropout(do_keep_prob))
+            self.add_module('do', nn.Dropout2d(do_keep_prob))
         self.add_module('LeakyRelu',nn.LeakyReLU(0.2, inplace=True))
 
 def weights_init(m):
@@ -33,14 +33,15 @@ class WDiscriminator(nn.Module):
             N = int(opt.nfc/pow(2,(i+1)))
             block = ConvBlock(max(2*N,opt.min_nfc), max(N,opt.min_nfc), opt.ker_size, padd=1, stride=1, norm_type=opt.norm_type, do_keep_prob=opt.do_keep_prob)
             self.body.add_module('block%d'%(i+1),block)
-        self.tail = nn.Conv2d(max(N,opt.min_nfc),1,kernel_size=opt.ker_size,stride=1,padding=1)
+        self.tail = nn.Sequential(nn.Conv2d(max(N,opt.min_nfc),1,kernel_size=opt.ker_size,stride=1,padding=1),
+                                  nn.LeakyReLU(0.2, inplace=True))
 
     def forward(self,x):
         x = self.head(x)
         x = self.body(x)
         x = self.tail(x)
-        #todo: I Added! see if neccessairy!
-        x = torch.tanh(x)
+        # #todo: I Added! see if neccessairy!
+        # x = torch.tanh(x)
         return x
 
 
