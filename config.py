@@ -53,7 +53,7 @@ def get_arguments():
     parser.add_argument('--Gsteps', type=int, help='Generator inner steps', default=3)
     parser.add_argument('--Dsteps', type=int, help='Discriminator inner steps', default=3)
     parser.add_argument('--lambda_grad', type=float, help='gradient penelty weight', default=0.1)
-    parser.add_argument('--alpha', type=float, help='reconstruction loss weight', default=10)
+    parser.add_argument('--lambda_adversarial', type=float, help='adversarial loss weight', default=5)
     parser.add_argument('--idx', type=float, help='factor for cycle loss from x to x', default=1)
     parser.add_argument('--idy', type=float, help='factor for cycle loss from y to y', default=1)
 

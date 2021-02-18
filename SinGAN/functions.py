@@ -319,8 +319,13 @@ def post_config(opt):
     if opt.manualSeed is None:
         opt.manualSeed = random.randint(1, 10000)
     print("Random Seed: ", opt.manualSeed)
+    # torch.set_deterministic(True)
+    # torch.backends.cudnn.deterministic = True
     random.seed(opt.manualSeed)
     torch.manual_seed(opt.manualSeed)
+    torch.cuda.manual_seed(opt.manualSeed)
+    np.random.RandomState(opt.manualSeed)
+    np.random.seed(opt.manualSeed)
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = str(opt.gpus)[1:-1].strip(' ')
     if torch.cuda.is_available() and opt.not_cuda:

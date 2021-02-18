@@ -32,11 +32,11 @@ def train(opt):
 
         Dst_curr, Gst_curr = init_models(opt)
         Dts_curr, Gts_curr = init_models(opt)
-        if (nfc_prev == opt.nfc and opt.curr_scale > 1):
-            Dst_curr.load_state_dict(torch.load('%s/%d/netDst.pth' % (opt.out_, scale_num - 1)))
-            Gst_curr.load_state_dict(torch.load('%s/%d/netGst.pth' % (opt.out_, scale_num - 1)))
-            Dts_curr.load_state_dict(torch.load('%s/%d/netDts.pth' % (opt.out_, scale_num - 1)))
-            Gts_curr.load_state_dict(torch.load('%s/%d/netGts.pth' % (opt.out_, scale_num - 1)))
+        # if (nfc_prev == opt.nfc and opt.curr_scale > 1):
+        #     Dst_curr.load_state_dict(torch.load('%s/%d/netDst.pth' % (opt.out_, scale_num - 1)))
+        #     Gst_curr.load_state_dict(torch.load('%s/%d/netGst.pth' % (opt.out_, scale_num - 1)))
+        #     Dts_curr.load_state_dict(torch.load('%s/%d/netDts.pth' % (opt.out_, scale_num - 1)))
+        #     Gts_curr.load_state_dict(torch.load('%s/%d/netGts.pth' % (opt.out_, scale_num - 1)))
         if len(opt.gpus) > 1:
             Dst_curr, Gst_curr = nn.DataParallel(Dst_curr, device_ids=opt.gpus), nn.DataParallel(Gst_curr, device_ids=opt.gpus)
             Dts_curr, Gts_curr = nn.DataParallel(Dts_curr, device_ids=opt.gpus), nn.DataParallel(Gts_curr, device_ids=opt.gpus)
@@ -199,7 +199,7 @@ def adversarial_disciriminative_train(netD, optimizerD, netG, prev, real_images,
     # train with real image
     netD.zero_grad()
     output = netD(real_images).to(opt.device)
-    errD_real = -output.mean()
+    errD_real = -1 * opt.lambda_adversarial * output.mean()
     errD_real.backward(retain_graph=True)
     D_x = errD_real.item()
 
@@ -207,11 +207,11 @@ def adversarial_disciriminative_train(netD, optimizerD, netG, prev, real_images,
     curr = m_noise(from_scales[opt.curr_scale])
     fake_images = netG(curr, prev)
     output = netD(fake_images.detach())
-    errD_fake = output.mean()
+    errD_fake =  opt.lambda_adversarial * output.mean()
     errD_fake.backward(retain_graph=True)
     D_G_z = errD_fake.item()
 
-    gradient_penalty = functions.calc_gradient_penalty(netD, real_images, fake_images, opt.lambda_grad, opt.device)
+    gradient_penalty =  opt.lambda_adversarial * functions.calc_gradient_penalty(netD, real_images, fake_images, opt.lambda_grad, opt.device)
     gradient_penalty.backward()
 
     errD = errD_real + errD_fake + gradient_penalty
@@ -230,7 +230,7 @@ def adversarial_generative_train(netG, optimizerG, netD, prev, from_scales, m_no
     ##end
 
     output = netD(fake.detach())
-    errG = -output.mean()
+    errG = -1 * opt.lambda_adversarial * output.mean()
     errG.backward(retain_graph=True)
 
     # reconstruction loss (as appers in singan, doesn't work for my settings):

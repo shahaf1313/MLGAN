@@ -33,8 +33,7 @@ class WDiscriminator(nn.Module):
             N = int(opt.nfc/pow(2,(i+1)))
             block = ConvBlock(max(2*N,opt.min_nfc), max(N,opt.min_nfc), opt.ker_size, padd=1, stride=1, norm_type=opt.norm_type, do_keep_prob=opt.do_keep_prob)
             self.body.add_module('block%d'%(i+1),block)
-        self.tail = nn.Sequential(nn.Conv2d(max(N,opt.min_nfc),1,kernel_size=opt.ker_size,stride=1,padding=1),
-                                  nn.LeakyReLU(0.2, inplace=True))
+        self.tail = nn.Sequential(nn.Conv2d(max(N,opt.min_nfc),1,kernel_size=opt.ker_size,stride=1,padding=1))
 
     def forward(self,x):
         x = self.head(x)
