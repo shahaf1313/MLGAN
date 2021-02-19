@@ -33,7 +33,8 @@ class WDiscriminator(nn.Module):
             N = int(opt.nfc/pow(2,(i+1)))
             block = ConvBlock(max(2*N,opt.min_nfc), max(N,opt.min_nfc), opt.ker_size, padd=1, stride=1, norm_type=opt.norm_type, do_keep_prob=opt.do_keep_prob)
             self.body.add_module('block%d'%(i+1),block)
-        self.tail = nn.Sequential(nn.Conv2d(max(N,opt.min_nfc),1,kernel_size=opt.ker_size,stride=1,padding=1))
+        self.tail = nn.Sequential(nn.Conv2d(max(N,opt.min_nfc),1,kernel_size=opt.ker_size,stride=1,padding=1),
+                                  nn.LeakyReLU(0.2))
 
     def forward(self,x):
         x = self.head(x)
@@ -69,8 +70,8 @@ class ConvGenerator(nn.Module):
         z = self.head(z)
         z = self.body(z)
         z = self.tail(z)
-        ind = int((prev_scale.shape[2]-curr_scale.shape[2])/2)
-        z = z[:,:,ind:(prev_scale.shape[2]-ind),ind:(curr_scale.shape[3]-ind)]
+        # ind = int((prev_scale.shape[2]-curr_scale.shape[2])/2)
+        # z = z[:,:,ind:(prev_scale.shape[2]-ind),ind:(curr_scale.shape[3]-ind)]
         return z
 
 
@@ -186,9 +187,6 @@ class UNetGenerator(nn.Module):
 
         out = self.conv_last(x)
         out = torch.tanh(out)
-
-        ind = int((prev_scale.shape[2]-curr_scale.shape[2])/2)
-        out = out[:,:,ind:(prev_scale.shape[2]-ind),ind:(curr_scale.shape[3]-ind)]
 
         return out
 

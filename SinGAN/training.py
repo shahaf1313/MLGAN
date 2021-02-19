@@ -108,7 +108,7 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                 ############################
                 # (1) Update D networks: maximize D(x) + D(G(z))
                 ###########################
-                images = None
+                cyc_images = None
                 for j in range(opt.Dsteps):
                     #train discriminator networks between domains (S->T, T->S)
 
@@ -142,16 +142,28 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                     errG = adversarial_generative_train(netGts, optimizerGts, netDts, prev_tis, target_scales, opt)
                     opt.tb.add_scalar('Scale%d/TS/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
 
-                    # Identity Loss:
+                    # Cycle Consistency Loss:
                     # (netGx, optimizerGx, x, x_scales, prev_x,
                     #  netGy, optimizerGy, y, y_scales, prev_y,
                     #  m_noise, opt)
-                    loss_x, loss_y, loss_id, images = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, prev_sit,
+                    cyc_loss_x, cyc_loss_y, cyc_loss, cyc_images = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, prev_sit,
                                                                              netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, prev_tis,
                                                                              opt)
-                    opt.tb.add_scalar('Scale%d/Identity/LossSTS' % opt.curr_scale, loss_x.item(), generator_steps)
-                    opt.tb.add_scalar('Scale%d/Identity/LossTST' % opt.curr_scale, loss_y.item(), generator_steps)
-                    opt.tb.add_scalar('Scale%d/Identity/Loss' % opt.curr_scale, loss_id.item(), generator_steps)
+                    opt.tb.add_scalar('Scale%d/Cyclic/LossSTS' % opt.curr_scale, cyc_loss_x.item(), generator_steps)
+                    opt.tb.add_scalar('Scale%d/Cyclic/LossTST' % opt.curr_scale, cyc_loss_y.item(), generator_steps)
+                    opt.tb.add_scalar('Scale%d/Cyclic/Loss' % opt.curr_scale, cyc_loss.item(), generator_steps)
+
+                    if opt.identity_loss_calc_rate > 0 and generator_steps % opt.identity_loss_calc_rate == 0:
+                        # Identity Loss:
+                        # (netGx, optimizerGx, x, x_scales, prev_x,
+                        #  netGy, optimizerGy, y, y_scales, prev_y,
+                        #  m_noise, opt)
+                        idt_loss_x, idt_loss_y, idt_loss, _ = identity_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, prev_sit,
+                                                                                     netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, prev_tis,
+                                                                                     opt)
+                        opt.tb.add_scalar('Scale%d/Identity/LossTT' % opt.curr_scale, idt_loss_x.item(), int(generator_steps/opt.identity_loss_calc_rate))
+                        opt.tb.add_scalar('Scale%d/Identity/LossSS' % opt.curr_scale, idt_loss_y.item(), int(generator_steps/opt.identity_loss_calc_rate))
+                        opt.tb.add_scalar('Scale%d/Identity/Loss' % opt.curr_scale, idt_loss.item(), int(generator_steps/opt.identity_loss_calc_rate))
 
                     generator_steps += 1
 
@@ -165,10 +177,10 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                 if int(steps/opt.save_pics_rate) >= save_pics_int or steps == 0:
                     s     = norm_image(source_scales[opt.curr_scale][0])
                     t     = norm_image(target_scales[opt.curr_scale][0])
-                    sit   = norm_image(images[0][0])
-                    sitis = norm_image(images[1][0])
-                    tis   = norm_image(images[2][0])
-                    tisit = norm_image(images[3][0])
+                    sit   = norm_image(cyc_images[0][0])
+                    sitis = norm_image(cyc_images[1][0])
+                    tis   = norm_image(cyc_images[2][0])
+                    tisit = norm_image(cyc_images[3][0])
                     opt.tb.add_image('Scale%d/source' % opt.curr_scale, s, save_pics_int*opt.save_pics_rate)
                     opt.tb.add_image('Scale%d/source_in_traget' % opt.curr_scale, sit, save_pics_int*opt.save_pics_rate)
                     opt.tb.add_image('Scale%d/source_in_traget_in_source' % opt.curr_scale, sitis, save_pics_int*opt.save_pics_rate)
@@ -241,7 +253,8 @@ def adversarial_generative_train(netG, optimizerG, netD, prev, from_scales, opt)
     return errG
 
 def cycle_consistency_loss(netGx, optimizerGx, x, x_scales, prev_x, netGy, optimizerGy, y, y_scales, prev_y, opt):
-    criterion = nn.L1Loss()
+    criterion_xx = nn.L1Loss()
+    criterion_yy = nn.L1Loss()
     optimizerGx.zero_grad()
     optimizerGy.zero_grad()
 
@@ -252,7 +265,7 @@ def cycle_consistency_loss(netGx, optimizerGx, x, x_scales, prev_x, netGy, optim
     #Gx(Gy(x)):
     curr_yx = Gy_x
     Gx_Gy_x = netGy(curr_yx, prev_y)
-    loss_x = opt.idx * criterion(Gx_Gy_x, x)
+    loss_x = opt.idx * criterion_xx(Gx_Gy_x, x)
     loss_x.backward()
 
     # Gx(y):
@@ -262,7 +275,7 @@ def cycle_consistency_loss(netGx, optimizerGx, x, x_scales, prev_x, netGy, optim
     # Gy(Gx(y)):
     curr_xy = Gx_y
     Gy_Gx_y = netGx(curr_xy, prev_x)
-    loss_y = opt.idy * criterion(Gy_Gx_y, y)
+    loss_y = opt.idy * criterion_yy(Gy_Gx_y, y)
     loss_y.backward()
 
     loss = loss_x + loss_y
@@ -270,6 +283,30 @@ def cycle_consistency_loss(netGx, optimizerGx, x, x_scales, prev_x, netGy, optim
     optimizerGy.step()
 
     return loss_x, loss_y, loss, (Gy_x, Gx_Gy_x, Gx_y, Gy_Gx_y)
+
+def identity_loss(netGx, optimizerGx, x, x_scales, prev_x, netGy, optimizerGy, y, y_scales, prev_y, opt):
+    criterion_x = nn.L1Loss()
+    criterion_y = nn.L1Loss()
+    optimizerGx.zero_grad()
+    optimizerGy.zero_grad()
+
+    #Gy(y):
+    curr_y = y_scales[opt.curr_scale]
+    Gy_y = netGx(curr_y, prev_y)
+    loss_y = criterion_y(Gy_y, y)
+    loss_y.backward()
+    optimizerGx.step()
+
+    #Gx(x):
+    curr_x = x_scales[opt.curr_scale]
+    Gx_x = netGy(curr_x, prev_x)
+    loss_x = criterion_x(Gx_x, x)
+    loss_x.backward()
+    optimizerGy.step()
+
+    loss = loss_x + loss_y
+
+    return loss_x, loss_y, loss, (Gx_x, Gy_y)
 
 def concat_pyramid(Gs, sources, opt):
     if len(Gs) == 0:
