@@ -75,24 +75,14 @@ class ConvGenerator(nn.Module):
         return z
 
 
-class UNetGenerator(nn.Module):
+class UNetGeneratorFourLayers(nn.Module):
 
-    def __init__(self):
-        """UNet implementation
+    def __init__(self, opt):
 
-        :returns: N/A
-        :rtype: N/A
-
-        """
         super().__init__()
+        self.is_initial_scale = opt.curr_scale == 0
 
-        self.conv1 = nn.Conv2d(16, 64, 1)
-        self.conv2 = nn.Conv2d(32, 64, 1)
-        self.conv3 = nn.Conv2d(64, 64, 1)
-
-        self.local_net = LocalNet(16)
-
-        self.dconv_down1 = LocalNet(6, 16)
+        self.dconv_down1 = LocalNet(3 if self.is_initial_scale else 6, 16)
         self.dconv_down2 = LocalNet(16, 32)
         self.dconv_down3 = LocalNet(32, 64)
         self.dconv_down4 = LocalNet(64, 128)
@@ -114,8 +104,10 @@ class UNetGenerator(nn.Module):
         self.conv_last = LocalNet(16, 3)
 
     def forward(self, curr_scale, prev_scale):
-
-        x = torch.cat((curr_scale, prev_scale), 1)
+        if self.is_initial_scale:
+            x = curr_scale
+        else:
+            x = torch.cat((curr_scale, prev_scale), 1)
 
         conv1 = self.dconv_down1(x)
         x = self.maxpool(conv1)
@@ -184,6 +176,73 @@ class UNetGenerator(nn.Module):
         del conv1
 
         x = self.dconv_up1(x)
+
+        out = self.conv_last(x)
+        out = torch.tanh(out)
+
+        return out
+
+class UNetGeneratorTwoLayers(nn.Module):
+
+    def __init__(self, opt):
+
+        super().__init__()
+        self.is_initial_scale = opt.curr_scale == 0
+
+        self.dconv_down1 = LocalNet(3 if self.is_initial_scale else 6, 16)
+        self.dconv_down2 = LocalNet(16, 32)
+        self.dconv_down3 = LocalNet(32, 32)
+
+        self.maxpool = nn.MaxPool2d(2, padding=0)
+
+        self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
+        self.up_conv1x1_1 = nn.Conv2d(32, 32, 1)
+        self.up_conv1x1_2 = nn.Conv2d(32, 32, 1)
+
+        self.dconv_up2 = LocalNet(64, 32)
+        self.dconv_up1 = LocalNet(48, 16)
+
+        self.conv_last = LocalNet(16, 3)
+
+    def forward(self, curr_scale, prev_scale):
+
+        if self.is_initial_scale:
+            x = curr_scale
+        else:
+            x = torch.cat((curr_scale, prev_scale), 1)
+
+        conv1 = self.dconv_down1(x)
+        x = self.maxpool(conv1)
+
+        conv2 = self.dconv_down2(x)
+        x = self.maxpool(conv2)
+
+        x = self.dconv_down3(x)
+
+        x = self.up_conv1x1_1(self.upsample(x))
+
+        if x.shape[3] != conv2.shape[3] and x.shape[2] != conv2.shape[2]:
+            x = torch.nn.functional.pad(x, (1, 0, 0, 1))
+        elif x.shape[2] != conv2.shape[2]:
+            x = torch.nn.functional.pad(x, (0, 0, 0, 1))
+        elif x.shape[3] != conv2.shape[3]:
+            x = torch.nn.functional.pad(x, (1, 0, 0, 0))
+
+        x = torch.cat([x, conv2], dim=1)
+
+        x = self.dconv_up2(x)
+        x = self.up_conv1x1_2(self.upsample(x))
+
+        if x.shape[3] != conv1.shape[3] and x.shape[2] != conv1.shape[2]:
+            x = torch.nn.functional.pad(x, (1, 0, 0, 1))
+        elif x.shape[2] != conv1.shape[2]:
+            x = torch.nn.functional.pad(x, (0, 0, 0, 1))
+        elif x.shape[3] != conv1.shape[3]:
+            x = torch.nn.functional.pad(x, (1, 0, 0, 0))
+
+        x = torch.cat([x, conv1], dim=1)
+        x = self.dconv_up1(x)
+        del conv1
 
         out = self.conv_last(x)
         out = torch.tanh(out)

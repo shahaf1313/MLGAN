@@ -44,7 +44,6 @@ def get_arguments():
     parser.add_argument('--max_size', type=int, help='image maximal size at the largest scale', default=None)
     parser.add_argument('--num_scales', type=int, help='number of scales in the pyramid', default=None)
 
-
     # optimization hyper parameters:
     parser.add_argument('--num_steps', type=int, default=1e5, help='number of steps to train per scale')
     parser.add_argument('--gamma', type=float, help='scheduler gamma', default=0.1)

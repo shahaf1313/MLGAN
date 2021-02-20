@@ -325,16 +325,21 @@ def concat_pyramid(Gs, sources, opt):
 
 def init_models(opt):
     # generator initialization:
-    unet_allowed = np.power(opt.scale_factor, opt.num_scales - opt.curr_scale) * np.minimum(H,W) / 16 > opt.ker_size
-    if opt.use_unet_generator and  unet_allowed:
-        print('generating UNET model')
-        netG = models.UNetGenerator().to(opt.device)
+    if opt.use_unet_generator:
+        use_four_level_unet = np.power(opt.scale_factor, opt.num_scales - opt.curr_scale) * np.minimum(H,W) / 16 > opt.ker_size
+        if use_four_level_unet:
+            print('Generating 4 layers UNET model')
+            netG = models.UNetGeneratorFourLayers(opt).to(opt.device)
+        else:
+            print('Generating 2 layers UNET model')
+            netG = models.UNetGeneratorTwoLayers(opt).to(opt.device)
     else:
         netG = models.ConvGenerator(opt).to(opt.device)
     netG.apply(models.weights_init)
     if opt.netG != '':
         netG.load_state_dict(torch.load(opt.netG))
     print(netG)
+
 
     # discriminator initialization:
     netD = models.WDiscriminator(opt).to(opt.device)
