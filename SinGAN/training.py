@@ -142,16 +142,17 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                     errG = adversarial_generative_train(netGts, optimizerGts, netDts, prev_tis, target_scales, opt)
                     opt.tb.add_scalar('Scale%d/TS/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
 
-                    # Cycle Consistency Loss:
-                    # (netGx, optimizerGx, x, x_scales, prev_x,
-                    #  netGy, optimizerGy, y, y_scales, prev_y,
-                    #  m_noise, opt)
-                    cyc_loss_x, cyc_loss_y, cyc_loss, cyc_images = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, prev_sit,
-                                                                             netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, prev_tis,
-                                                                             opt)
-                    opt.tb.add_scalar('Scale%d/Cyclic/LossSTS' % opt.curr_scale, cyc_loss_x.item(), generator_steps)
-                    opt.tb.add_scalar('Scale%d/Cyclic/LossTST' % opt.curr_scale, cyc_loss_y.item(), generator_steps)
-                    opt.tb.add_scalar('Scale%d/Cyclic/Loss' % opt.curr_scale, cyc_loss.item(), generator_steps)
+                    if opt.cyclic_loss_calc_rate > 0 and generator_steps % opt.cyclic_loss_calc_rate == 0:
+                        # Cycle Consistency Loss:
+                        # (netGx, optimizerGx, x, x_scales, prev_x,
+                        #  netGy, optimizerGy, y, y_scales, prev_y,
+                        #  m_noise, opt)
+                        cyc_loss_x, cyc_loss_y, cyc_loss, cyc_images = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, prev_sit,
+                                                                                 netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, prev_tis,
+                                                                                 opt)
+                        opt.tb.add_scalar('Scale%d/Cyclic/LossSTS' % opt.curr_scale, cyc_loss_x.item(), int(generator_steps/opt.cyclic_loss_calc_rate))
+                        opt.tb.add_scalar('Scale%d/Cyclic/LossTST' % opt.curr_scale, cyc_loss_y.item(), int(generator_steps/opt.cyclic_loss_calc_rate))
+                        opt.tb.add_scalar('Scale%d/Cyclic/Loss' % opt.curr_scale, cyc_loss.item(), int(generator_steps/opt.cyclic_loss_calc_rate))
 
                     if opt.identity_loss_calc_rate > 0 and generator_steps % opt.identity_loss_calc_rate == 0:
                         # Identity Loss:
@@ -177,6 +178,10 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                 if int(steps/opt.save_pics_rate) >= save_pics_int or steps == 0:
                     s     = norm_image(source_scales[opt.curr_scale][0])
                     t     = norm_image(target_scales[opt.curr_scale][0])
+                    if cyc_images is None:
+                        _, _, _, cyc_images = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, prev_sit,
+                                                                     netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, prev_tis,
+                                                                     opt)
                     sit   = norm_image(cyc_images[0][0])
                     sitis = norm_image(cyc_images[1][0])
                     tis   = norm_image(cyc_images[2][0])

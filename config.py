@@ -26,7 +26,7 @@ def get_arguments():
 
     # networks parameters:
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument("--batch_size_list", type=int, nargs='+', help="batch size in each one of the scales", default=[0])
+    parser.add_argument('--batch_size_list', type=int, nargs='+', help="batch size in each one of the scales", default=[0])
     parser.add_argument('--norm_type', type=str, default='batch_norm')
     parser.add_argument('--do_keep_prob', type=float, default=0.5)
     parser.add_argument('--bias_in_tail', default=False, action='store_true')
@@ -53,6 +53,7 @@ def get_arguments():
     parser.add_argument('--Gsteps', type=int, help='Generator inner steps', default=3)
     parser.add_argument('--Dsteps', type=int, help='Discriminator inner steps', default=3)
     parser.add_argument('--identity_loss_calc_rate', type=int, help='rate for identity loss calculation', default=0)
+    parser.add_argument('--cyclic_loss_calc_rate', type=int, help='rate for cyclic loss calculation', default=1)
     parser.add_argument('--lambda_grad', type=float, help='gradient penelty weight', default=0.1)
     parser.add_argument('--lambda_adversarial', type=float, help='adversarial loss weight', default=1)
     parser.add_argument('--idx', type=float, help='factor for cycle loss from x to x', default=1)
