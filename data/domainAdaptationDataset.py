@@ -2,14 +2,14 @@ import numpy as np
 from constants import IGNORE_LABEL, IMG_CROP_SIZE
 from PIL import Image
 import math
-import torch
+import os.path as osp
 from torch.utils import data
 from torchvision import transforms
 
 class domainAdaptationDataSet(data.Dataset):
     def __init__(self, root, list_path, scale_factor, num_scales, curr_scale, set, get_image_label=False):
         self.root = root
-        self.list_path = list_path
+        self.list_path = osp.join(list_path, '%s.txt' % set)
         self.scale_factor = scale_factor
         self.num_scales = num_scales
         self. curr_scale = curr_scale
@@ -17,7 +17,7 @@ class domainAdaptationDataSet(data.Dataset):
         self.trans = transforms.ToTensor()
         self.crop_size = IMG_CROP_SIZE
         self.ignore_label = IGNORE_LABEL
-        self.img_ids = [i_id.strip() for i_id in open(list_path)]
+        self.img_ids = [i_id.strip() for i_id in open(self.list_path)]
         self.get_image_label = get_image_label
         self.id_to_trainid = {7: 0, 8: 1, 11: 2, 12: 3, 13: 4, 17: 5,
                               19: 6, 20: 7, 21: 8, 22: 9, 23: 10, 24: 11, 25: 12,

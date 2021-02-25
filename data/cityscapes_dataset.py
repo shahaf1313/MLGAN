@@ -12,7 +12,7 @@ class cityscapesDataSet(domainAdaptationDataSet):
         image = Image.open(osp.join(   self.root, "leftImg8bit/%s/%s" % (self.set, name)   )).convert('RGB')
         image = image.resize(self.crop_size, Image.BICUBIC)
 
-        label, label_copy = None, None
+        scales_pyramid, label, label_copy = None, None, None
         if self.get_image_label:
             lbname = name.replace("leftImg8bit", "gtFine_labelIds")
             label = Image.open(osp.join(   self.root, "gtFine/%s/%s" % (self.set, lbname)   ))
@@ -24,11 +24,18 @@ class cityscapesDataSet(domainAdaptationDataSet):
                 label_copy[label == k] = v
             label_copy = label_copy.copy()
 
-        scales_pyramid = self.GeneratePyramid(image)
+        if self.set == 'train':
+            scales_pyramid = self.GeneratePyramid(image)
 
-        if self.get_image_label:
+        if self.set == 'train' and self.get_image_label:
             return scales_pyramid, label_copy
-        else:
+        elif self.set == 'train' and not self.get_image_label:
             return scales_pyramid
+        elif self.set is not 'train' and self.get_image_label:
+            return image.copy(), label_copy
+        elif self.set is not 'train' and not self.get_image_label:
+            return image.copy()
+
+
 
 

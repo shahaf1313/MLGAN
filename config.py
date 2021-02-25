@@ -1,5 +1,10 @@
 import argparse
-
+import torch
+import datetime
+import random
+import numpy as np
+import os
+import sys
 
 def get_arguments():
     parser = argparse.ArgumentParser()
@@ -8,9 +13,8 @@ def get_arguments():
     parser.add_argument('--not_cuda', action='store_true', help='disables cuda', default=0)
 
     # load, input, save configurations:
-    parser.add_argument('--netG', default='', help="path to netG (to continue training)")
-    parser.add_argument('--netD', default='', help="path to netD (to continue training)")
     parser.add_argument('--manualSeed', default=1337, type=int, help='manual seed')
+    parser.add_argument('--continue_train_from_path', type=str, help='Path to folder that contains all networks and continues to train from there', default='')
     parser.add_argument('--nc_z', type=int, help='noise # channels', default=3)
     parser.add_argument('--nc_im', type=int, help='image # channels', default=3)
     parser.add_argument('--out', help='output folder', default='Output')
@@ -19,10 +23,10 @@ def get_arguments():
     parser.add_argument("--source", type=str, default='gta5', help="source dataset : gta5 or synthia")
     parser.add_argument("--target", type=str, default='cityscapes', help="target dataset : cityscapes")
     parser.add_argument("--src_data_dir", type=str, default='/home/shahaf/data/GTA5', help="Path to the directory containing the source dataset.")
-    parser.add_argument("--src_data_list", type=str, default='./dataset/gta5_list/train.txt', help="Path to the listing of images in the source dataset.")
+    parser.add_argument("--src_data_list", type=str, default='./dataset/gta5_list/', help="Path to folder that contains a file with a list of images from the source dataset. File named set.txt, where set is train/val/test.")
     parser.add_argument("--trg_data_dir", type=str, default='/home/shahaf/data/cityscapes', help="Path to the directory containing the target dataset.")
-    parser.add_argument("--trg_data_list", type=str, default='./dataset/cityscapes_list/train.txt', help="List of images in the target dataset.")
-    parser.add_argument("--num_workers", type=int, default=8, help="Number of threads for each worker")
+    parser.add_argument("--trg_data_list", type=str, default='./dataset/cityscapes_list/', help="Path to folder that contains a file with a list of images from the target dataset. File named set.txt, where set is train/val/test.")
+    parser.add_argument("--num_workers", type=int, default=16, help="Number of threads for each worker")
 
     # networks parameters:
     parser.add_argument('--batch_size', type=int, default=1)
@@ -59,12 +63,72 @@ def get_arguments():
     parser.add_argument('--idx', type=float, help='factor for cycle loss from x to x', default=1)
     parser.add_argument('--idy', type=float, help='factor for cycle loss from y to y', default=1)
 
+    # Semseg network parameters:
+    parser.add_argument("--model", type=str, required=False, default='DeepLab', help="available options : DeepLab and VGG")
+    parser.add_argument("--multiscale_model_path", type=str, default='~', help="path to Generators from source to target domain.")
+    parser.add_argument('--lr_semseg', type=float, default=0.00025, help='learning rate, default=0.00025')
+    parser.add_argument("--weight-decay", type=float, default=0.0005, help="Regularisation parameter for L2-loss.")
+    parser.add_argument("--ita", type=float, default=2.0, help="ita for robust entropy")
+    parser.add_argument("--entW", type=float, default=0.005, help="weight for entropy")
+    parser.add_argument("--power", type=float, default=0.9, help="Decay parameter to compute the learning rate (only for deeplab).")
+    parser.add_argument("--momentum", type=float, default=0.9, help="Momentum component of the optimiser.")
+
 
     # Miscellaneous parameters:
+    parser.add_argument('--mode', help='task to be done', default='train')
     parser.add_argument("--tb_logs_dir", type=str, required=False, default='./runs', help="Path to Tensorboard logs dir.")
+    parser.add_argument('--debug_run', default=False, action='store_true')
     parser.add_argument("--checkpoints_dir", type=str, required=False, default='./TrainedModels', help="Where to save snapshots of the model.")
     parser.add_argument("--print_rate", type=int, required=False, default=100, help="Print progress to screen every x iterations")
     parser.add_argument("--save_pics_rate", type=int, required=False, default=1000, help="Save images to tb every x iterations")
 
-
     return parser
+
+
+class Logger(object):
+    def __init__(self, log_path):
+        self.terminal = sys.stdout
+        self.log = open(log_path, 'a+')
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        #this flush method is needed for python 3 compatibility.
+        #this handles the flush command by doing nothing.
+        #you might want to specify some extra behavior here.
+        self.log.flush()
+
+def post_config(opt):
+        # init fixed parameters
+        if opt.debug_run:
+            opt.tb_logs_dir = './debug_runs'
+        opt.device = torch.device("cpu" if opt.not_cuda else "cuda:0")
+        opt.out_ = 'TrainedModels/%s' % datetime.datetime.now().strftime('%d-%m-%Y::%H:%M:%S')
+        try:
+            os.makedirs(opt.out_)
+        except OSError:
+            pass
+        opt.logger = Logger(os.path.join(opt.out_, 'log.txt'))
+        sys.stdout = opt.logger
+        opt.nfc_init = opt.nfc
+        opt.min_nfc = opt.nfc
+        opt.min_nfc_init = opt.min_nfc
+        opt.scale_factor_init = opt.scale_factor
+
+        if opt.manualSeed is None:
+            opt.manualSeed = random.randint(1, 10000)
+        print("Random Seed: ", opt.manualSeed)
+        # torch.set_deterministic(True)
+        # torch.backends.cudnn.deterministic = True
+        random.seed(opt.manualSeed)
+        torch.manual_seed(opt.manualSeed)
+        torch.cuda.manual_seed(opt.manualSeed)
+        np.random.RandomState(opt.manualSeed)
+        np.random.seed(opt.manualSeed)
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(opt.gpus)[1:-1].strip(' ')
+        if torch.cuda.is_available() and opt.not_cuda:
+            print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+        return opt

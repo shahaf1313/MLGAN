@@ -2,23 +2,9 @@ from torch.utils import data
 from data.gta5_dataset import GTA5DataSet
 from data.cityscapes_dataset import cityscapesDataSet
 from data.synthia_dataset import SYNDataSet
-import torch
 
 
-# class SimpleCustomBatch:
-#     def __init__(self, data):
-#         self.batch = data
-#
-#     def pin_memory(self):
-#         for scales in self.batch:
-#             for image in scales:
-#                 image.pin_memory()
-#         return self
-#
-# def collate_wrapper(batch):
-#     return SimpleCustomBatch(batch)
-
-def CreateSrcDataLoader(opt, set='train'):
+def CreateSrcDataLoader(opt, set='train', get_image_label=False):
     if opt.source == 'gta5':
         source_dataset = GTA5DataSet(opt.src_data_dir,
                                      opt.src_data_list,
@@ -26,7 +12,7 @@ def CreateSrcDataLoader(opt, set='train'):
                                      opt.num_scales,
                                      opt.curr_scale,
                                      set,
-                                     get_image_label=False)
+                                     get_image_label=get_image_label)
     # elif args.source == 'synthia':
     #     source_dataset = SYNDataSet(args.data_dir, args.data_list, crop_size=image_sizes['cityscapes'], resize=image_sizes['synthia'], mean=IMG_MEAN)
     else:
@@ -47,7 +33,7 @@ def CreateTrgDataLoader(opt, set='train'):
                                        opt.num_scales,
                                        opt.curr_scale,
                                        set,
-                                       get_image_label=False)
+                                       get_image_label=set is not 'train')
 
     if set == 'train':
         target_dataloader = data.DataLoader(target_dataset,

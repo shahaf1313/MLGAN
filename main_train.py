@@ -1,16 +1,15 @@
-from SinGAN.manipulate import *
-from SinGAN.training import *
 from constants import H,W
 from data import CreateSrcDataLoader
 from data import CreateTrgDataLoader
-import SinGAN.functions as functions
+from config import get_arguments, post_config
+from SinGAN.functions import adjust_scales2image
+from SinGAN.training import train
+import numpy as np
 
 if __name__ == '__main__':
     parser = get_arguments()
-    parser.add_argument('--input_dir', help='input image dir', default='Input/Images')
-    parser.add_argument('--mode', help='task to be done', default='train')
     opt = parser.parse_args()
-    opt = functions.post_config(opt)
+    opt = post_config(opt)
 
     opt.batch_size = 1
     opt.curr_scale = 0
@@ -30,7 +29,7 @@ if __name__ == '__main__':
     opt.source_loaders = source_loaders
     opt.target_loaders = target_loaders
 
-    functions.adjust_scales2image(H, W, opt)
+    adjust_scales2image(H, W, opt)
     print('########################### MLCGAN Configuration ##############################')
     for arg in vars(opt):
         print(arg + ': ' + str(getattr(opt, arg)))

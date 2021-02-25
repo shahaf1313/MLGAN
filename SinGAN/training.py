@@ -12,11 +12,18 @@ from SinGAN.functions import imresize_torch
 import datetime
 from torch.utils.tensorboard import SummaryWriter
 
+
 def train(opt):
-    scale_num = 0
-    Gst, Gts = [], []
-    Dst, Dts = [], []
-    opt.tb = SummaryWriter('./runs/%sGPU%d/' % (datetime.datetime.now().strftime('%d-%m-%Y::%H:%M:%S'), opt.gpus[0]))
+    if opt.continue_train_from_path is not '':
+        Gst, Gts, Dst, Dts = load_trained_networks(opt)
+        assert len(Gst) == len(Gts) == len(Dst) == len(Dts)
+        scale_num = len(Gst)
+    else:
+        scale_num = 0
+        Gst, Gts = [], []
+        Dst, Dts = [], []
+
+    opt.tb = SummaryWriter(os.path.join(opt.tb_logs_dir, '%sGPU%d/' % (datetime.datetime.now().strftime('%d-%m-%Y::%H:%M:%S'), opt.gpus[0])))
 
     while scale_num < opt.stop_scale + 1:
         opt.curr_scale = scale_num
@@ -323,7 +330,7 @@ def concat_pyramid(Gs, sources, opt):
         G_z = G_z[:, :, 0:source_curr.shape[2], 0:source_curr.shape[3]]
         G_z = G(source_curr, G_z.detach())
         # G_z = imresize(G_z, 1 / opt.scale_factor, opt)
-        G_z = imresize_torch(G_z, 1 / opt.scale_factor, opt)
+        G_z = imresize_torch(G_z, 1 / opt.scale_factor)
         G_z = G_z[:, :, 0:source_next.shape[2], 0:source_next.shape[3]]
         count += 1
     return G_z
@@ -341,18 +348,21 @@ def init_models(opt):
     else:
         netG = models.ConvGenerator(opt).to(opt.device)
     netG.apply(models.weights_init)
-    if opt.netG != '':
-        netG.load_state_dict(torch.load(opt.netG))
     print(netG)
 
 
     # discriminator initialization:
     netD = models.WDiscriminator(opt).to(opt.device)
     netD.apply(models.weights_init)
-    if opt.netD != '':
-        netD.load_state_dict(torch.load(opt.netD))
     print(netD)
     return netD, netG
+
+def load_trained_networks(opt):
+    Gst = torch.load(os.path.join(opt.continue_train_from_path, 'Gst.pth'))
+    Gts = torch.load(os.path.join(opt.continue_train_from_path, 'Gts.pth'))
+    Dst = torch.load(os.path.join(opt.continue_train_from_path, 'Dst.pth'))
+    Dts = torch.load(os.path.join(opt.continue_train_from_path, 'Dts.pth'))
+    return Gst, Gts, Dst, Dts
 
 def norm_image(im):
     out = (im + 1)/2
