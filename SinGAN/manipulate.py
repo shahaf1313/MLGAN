@@ -147,4 +147,3 @@ def SinGAN_generate(Gs,Zs,reals,NoiseAmp,opt,in_s=None,scale_v=1,scale_h=1,n=0,g
             images_cur.append(I_curr)
         n+=1
     return I_curr.detach()
-

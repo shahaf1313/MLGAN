@@ -1,22 +1,22 @@
-from SemsegNetworks import CreateSemsegModel
-from constants import NUM_CLASSES, IGNORE_LABEL, trainId2label
-from SinGAN.functions import compute_cm_batch_torch, compute_iou_torch, imresize_torch
-from data import CreateSrcDataLoader, CreateTrgDataLoader
-import torch
 from config import get_arguments, post_config
+import datetime
+from data import CreateSrcDataLoader, CreateTrgDataLoader
 from SinGAN.functions import denorm, colorize_mask
 import numpy as np
 import time
+from constants import NUM_CLASSES, IGNORE_LABEL, trainId2label
+from SinGAN.functions import compute_cm_batch_torch, compute_iou_torch, imresize_torch
+import torch
 import os
 from torch.utils.tensorboard import SummaryWriter
-import datetime
 
 def main():
     parser = get_arguments()
     opt = parser.parse_args()
     opt = post_config(opt)
-
-    multiscale_model = torch.load(opt.multiscale_model_path)
+    from SemsegNetworks import CreateSemsegPyramidModel
+    criterion = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_LABEL)
+    multiscale_model = torch.load(opt.multiscale_model_path, map_location='cpu')
     opt.curr_scale = len(multiscale_model)
     opt.num_scales = len(multiscale_model)
     for scale in multiscale_model:
@@ -25,25 +25,28 @@ def main():
 
     source_train_loader = CreateSrcDataLoader(opt, 'train', get_image_label=True)
     opt.epoch_size = len(source_train_loader.dataset)
+    opt.num_epochs = int(opt.num_steps/opt.epoch_size)
     target_val_loader = CreateTrgDataLoader(opt, 'val')
 
-    semseg_net, semseg_optimizer = CreateSemsegModel(opt)
-    # semseg_scheduler = torch.optim.lr_scheduler.MultiStepLR(semseg_optimizer, milestones=np.arange(0, opt.num_epochs, 10), gamma=0.9)
+    feature_extractor, classifier, optimizer_fea, optimizer_cls = CreateSemsegPyramidModel(opt)
+    scheduler_fea = torch.optim.lr_scheduler.StepLR(optimizer_fea, step_size=5,gamma=0.9)
+    scheduler_cls = torch.optim.lr_scheduler.StepLR(optimizer_cls, step_size=5, gamma=0.9)
 
     print('######### Network created #########')
-    print('Architecture of Semantic Segmentation network:\n' + str(semseg_net))
+    print('Architecture of Semantic Segmentation network:\n' + str(classifier) + str(feature_extractor))
     opt.tb = SummaryWriter(os.path.join(opt.tb_logs_dir, '%sGPU%d' % (datetime.datetime.now().strftime('%d-%m-%Y::%H:%M:%S'), opt.gpus[0])))
 
     steps = 0
     print_int = 0
     save_pics_int = 0
-    epoch_num = 1
+    epoch_num = 1 if opt.semseg_model_epoch_to_resume > 0 else opt.semseg_model_epoch_to_resume + 1
     start = time.time()
     keep_training = True
 
     while keep_training:
         print('semeg train: starting epoch %d...' % (epoch_num))
-        semseg_net.train()
+        feature_extractor.train()
+        classifier.train()
 
         for batch_num, (source_scales, source_label) in enumerate(source_train_loader):
             if steps > opt.num_steps:
@@ -53,20 +56,25 @@ def main():
             # Move scale tensors to CUDA:
             for i in range(len(source_scales)):
                 source_scales[i] = source_scales[i].to(opt.device)
+            source_label = source_label.type(torch.long)
             source_label = source_label.to(opt.device)
-            semseg_optimizer.zero_grad()
 
-            with torch.no_grad():
-                source_in_target = create_target_from_source(multiscale_model, source_scales, opt)
+            if opt.train_source:
+                source_in_target = source_scales[-1]
+            else:
+                with torch.no_grad():
+                    source_in_target = create_target_from_source(multiscale_model, source_scales, opt)
 
-            predicted, loss_seg, loss_ent = semseg_net(source_in_target, lbl=source_label)
-            pred_label = torch.argmax(predicted, dim=1)
-            loss = torch.mean(loss_seg + opt.entW*loss_ent)
+            optimizer_fea.zero_grad()
+            optimizer_cls.zero_grad()
+            size = source_label.shape[-2:]
+            pred_softs = classifier(feature_extractor(source_in_target), size)
+            pred_labels = torch.argmax(pred_softs, dim=1)
+            loss = criterion(pred_softs, source_label)
             loss.backward()
+            optimizer_fea.step()
+            optimizer_cls.step()
             opt.tb.add_scalar('TrainSemseg/loss', loss.item(), steps)
-            opt.tb.add_scalar('TrainSemseg/loss_seg', loss_seg.item(), steps)
-            opt.tb.add_scalar('TrainSemseg/loss_ent', loss_ent.item(), steps)
-            semseg_optimizer.step()
 
 
             if int(steps/opt.print_rate) >= print_int or steps == 0:
@@ -80,7 +88,7 @@ def main():
                 s       = denorm(source_scales[-1][0])
                 sit     = denorm(source_in_target[0])
                 s_lbl   = colorize_mask(source_label[0])
-                sit_lbl = colorize_mask(pred_label[0])
+                sit_lbl = colorize_mask(pred_labels[0])
                 opt.tb.add_image('TrainSemseg/source', s, save_pics_int*opt.save_pics_rate)
                 opt.tb.add_image('TrainSemseg/source_in_target', sit, save_pics_int*opt.save_pics_rate)
                 opt.tb.add_image('TrainSemseg/source_label', s_lbl, save_pics_int*opt.save_pics_rate)
@@ -89,22 +97,27 @@ def main():
 
             steps += 1
         # Update LR:
-        # semseg_scheduler.step()
+        scheduler_fea.step()
+        scheduler_cls.step()
+
         #Validation:
         print('train semseg: starting validation after epoch %d.' % epoch_num)
-        iou, miou, cm = calculte_validation_accuracy(semseg_net, target_val_loader, opt, epoch_num)
+        iou, miou, cm = calculte_validation_accuracy(feature_extractor, classifier, target_val_loader, opt, epoch_num)
         save_epoch_accuracy(opt.tb, 'Validtaion', iou, miou, epoch_num)
         print('train semseg: average accuracy of epoch #%d on target domain: mIoU = %2f' % (epoch_num, miou))
-        if epoch_num % 4 == 0:
-            torch.save(semseg_net, '%s/%s_AdaptedToTarget_Epoch%d.pth' % (opt.out_, opt.model, epoch_num))
+
+        # Save checkpoint:
+        torch.save(feature_extractor, '%s/%s_%s_AdaptedToTarget_Epoch%d.pth' % (opt.out_,opt.model, 'featureExtractor', epoch_num))
+        torch.save(classifier, '%s/%s_%s_AdaptedToTarget_Epoch%d.pth' % (opt.out_,opt.model, 'classifier', epoch_num))
         epoch_num += 1
 
     #Save final network:
-    torch.save(semseg_net, '%s/%s_AdaptedToTarget_Final.pth' % (opt.out_, opt.model))
+    torch.save(feature_extractor, '%s/%s_%s_AdaptedToTarget_Epoch%d.pth' % (opt.out_,opt.model, 'featureExtractor', epoch_num))
+    torch.save(classifier, '%s/%s_%s_AdaptedToTarget_Epoch%d.pth' % (opt.out_,opt.model, 'classifier', epoch_num))
 
     #Test:
     print('train semseg: starting final accuracy calculation...')
-    iou, miou, cm = calculte_validation_accuracy(semseg_net, target_val_loader, opt, epoch_num)
+    iou, miou, cm = calculte_validation_accuracy(feature_extractor, classifier, target_val_loader, opt, epoch_num)
     save_epoch_accuracy(opt.tb, 'Test', iou, miou, epoch_num)
     opt.tb.close()
     print('Finished training.')
@@ -124,15 +137,15 @@ def save_epoch_accuracy(tb, set, iou, miou, epoch):
         for i in range(NUM_CLASSES):
             tb.add_scalar('%sAccuracy/%s class accuracy' % (set, trainId2label[i].name), iou[i], epoch)
         tb.add_scalar('%sAccuracy/Accuracy History [mIoU]' % set, miou, epoch)
-    elif set == 'Test':
-        print('================Model Acuuracy Summery================')
-        for i in range(NUM_CLASSES):
-            print('%s class accuracy: = %.2f' % (trainId2label[i].name, iou[i]))
-        print('Average accuracy of test set on target domain: mIoU = %2f' % miou)
-        print('======================================================')
+    print('================Epoch Acuuracy Summery================')
+    for i in range(NUM_CLASSES):
+        print('%s class accuracy: = %.2f' % (trainId2label[i].name, iou[i]))
+    print('Average accuracy of test set on target domain: mIoU = %2f' % miou)
+    print('======================================================')
 
-def calculte_validation_accuracy(semseg_net, target_val_loader, opt, epoch_num):
-    semseg_net.eval()
+def calculte_validation_accuracy(feature_extractor, classifier, target_val_loader, opt, epoch_num):
+    feature_extractor.eval()
+    classifier.eval()
     rand_samp_inds = np.random.randint(0, len(target_val_loader.dataset), 5)
     rand_batchs = np.floor(rand_samp_inds/opt.batch_size).astype(np.int)
     cm = torch.zeros((NUM_CLASSES, NUM_CLASSES)).cuda()
@@ -140,7 +153,8 @@ def calculte_validation_accuracy(semseg_net, target_val_loader, opt, epoch_num):
         target_images = target_images.to(opt.device)
         target_labels = target_labels.to(opt.device)
         with torch.no_grad():
-            pred_softs = semseg_net(target_images)
+            size = target_labels.shape[-2:]
+            pred_softs = classifier(feature_extractor(target_images), size)
             pred_labels = torch.argmax(pred_softs, dim=1)
             cm += compute_cm_batch_torch(pred_labels, target_labels, IGNORE_LABEL, NUM_CLASSES)
             if val_batch_num in rand_batchs:

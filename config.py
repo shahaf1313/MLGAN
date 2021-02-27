@@ -65,8 +65,12 @@ def get_arguments():
 
     # Semseg network parameters:
     parser.add_argument("--model", type=str, required=False, default='DeepLab', help="available options : DeepLab and VGG")
-    parser.add_argument("--multiscale_model_path", type=str, default='~', help="path to Generators from source to target domain.")
+    parser.add_argument("--multiscale_model_path", type=str, default='', help="path to Generators from source to target domain.")
+    parser.add_argument("--semseg_model_path", type=str, default='', help="path to folder that contains classifier and feature extractor weights.")
+    parser.add_argument("--semseg_model_epoch_to_resume", type=int, default=-1, help='Epoch that checkpoint to semseg net saved from')
+    parser.add_argument("--pretrained_semseg_path", type=str, default='', help="path weights file for pretrained semseg model.")
     parser.add_argument('--lr_semseg', type=float, default=0.00025, help='learning rate, default=0.00025')
+    parser.add_argument('--train_source', default=False, action='store_true')
     parser.add_argument("--weight-decay", type=float, default=0.0005, help="Regularisation parameter for L2-loss.")
     parser.add_argument("--ita", type=float, default=2.0, help="ita for robust entropy")
     parser.add_argument("--entW", type=float, default=0.005, help="weight for entropy")
@@ -104,7 +108,9 @@ def post_config(opt):
         # init fixed parameters
         if opt.debug_run:
             opt.tb_logs_dir = './debug_runs'
-        opt.device = torch.device("cpu" if opt.not_cuda else "cuda:0")
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(opt.gpus)[1:-1].strip(' ')
+        opt.device = torch.device('cpu' if opt.not_cuda else 'cuda')
         opt.out_ = 'TrainedModels/%s' % datetime.datetime.now().strftime('%d-%m-%Y::%H:%M:%S')
         try:
             os.makedirs(opt.out_)
@@ -127,8 +133,7 @@ def post_config(opt):
         torch.cuda.manual_seed(opt.manualSeed)
         np.random.RandomState(opt.manualSeed)
         np.random.seed(opt.manualSeed)
-        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(opt.gpus)[1:-1].strip(' ')
+
         if torch.cuda.is_available() and opt.not_cuda:
             print("WARNING: You have a CUDA device, so you should probably run with --cuda")
         return opt

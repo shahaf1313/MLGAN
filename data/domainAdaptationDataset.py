@@ -31,15 +31,19 @@ class domainAdaptationDataSet(data.Dataset):
             self.img_ids = self.img_ids * int(np.ceil(float(epoch_size) / len(self.img_ids)))
         self.img_ids = self.img_ids[:epoch_size]
 
+    def RGBImageToNumpy(self, im):
+        im = np.asarray(im, np.float32)
+        im = np.transpose(im, (2, 0, 1))
+        im = (im - 128.) / 128  # change from 0..255 to -1..1
+        return im
+
     def GeneratePyramid(self, image: Image):
         scales_pyramid = []
         for i in range(0, self.curr_scale + 1, 1):
             scale = math.pow(self.scale_factor, self.num_scales - i)
             curr_size = (np.ceil(scale * np.array(self.crop_size))).astype(np.int)
             curr_scale = image.resize(curr_size, Image.BICUBIC)
-            curr_scale = np.asarray(curr_scale, np.float32)
-            curr_scale = np.transpose(curr_scale, (2, 0, 1))
-            curr_scale = (curr_scale - 128.) / 128  # change from 0..255 to -1..1
+            curr_scale = self.RGBImageToNumpy(curr_scale)
             scales_pyramid.append(curr_scale)
 
         return scales_pyramid
