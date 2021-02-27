@@ -89,6 +89,7 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
         discriminator_steps = 0
         generator_steps = 0
         steps = 0
+        checkpoint_int = 1
         print_int = 0
         save_pics_int = 0
         epoch_num = 1
@@ -202,6 +203,14 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
 
                     save_pics_int += 1
 
+                # Save network checkpoint every 20k steps:
+                if steps > checkpoint_int * 20000:
+                    print('scale %d: saving networks after %d steps...' % (opt.curr_scale, steps))
+                    if (len(opt.gpus) > 1):
+                        functions.save_networks(netDst.module, netGst.module, netDts.module, netGts.module, opt)
+                    else:
+                        functions.save_networks(netDst, netGst, netDts, netGts, opt)
+                    checkpoint_int += 1
                 steps = np.minimum(generator_steps, discriminator_steps)
 
                 # schedulerDst.step()
@@ -362,6 +371,11 @@ def load_trained_networks(opt):
     Gts = torch.load(os.path.join(opt.continue_train_from_path, 'Gts.pth'))
     Dst = torch.load(os.path.join(opt.continue_train_from_path, 'Dst.pth'))
     Dts = torch.load(os.path.join(opt.continue_train_from_path, 'Dts.pth'))
+    for m1, m2, m3, m4 in zip(Gts, Gts, Dst, Dts):
+        m1.eval().to(opt.device)
+        m2.eval().to(opt.device)
+        m3.eval().to(opt.device)
+        m4.eval().to(opt.device)
     return Gst, Gts, Dst, Dts
 
 def norm_image(im):
