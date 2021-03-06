@@ -60,8 +60,7 @@ def get_arguments():
     parser.add_argument('--cyclic_loss_calc_rate', type=int, help='rate for cyclic loss calculation', default=1)
     parser.add_argument('--lambda_grad', type=float, help='gradient penelty weight', default=0.1)
     parser.add_argument('--lambda_adversarial', type=float, help='adversarial loss weight', default=1)
-    parser.add_argument('--idx', type=float, help='factor for cycle loss from x to x', default=1)
-    parser.add_argument('--idy', type=float, help='factor for cycle loss from y to y', default=1)
+    parser.add_argument('--lambda_cyclic', type=float, help='cyclic loss weight', default=1)
 
     # Semseg network parameters:
     parser.add_argument("--model", type=str, required=False, default='DeepLab', help="available options : DeepLab and VGG")
