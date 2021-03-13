@@ -15,6 +15,7 @@ def get_arguments():
     # load, input, save configurations:
     parser.add_argument('--manualSeed', default=1337, type=int, help='manual seed')
     parser.add_argument('--continue_train_from_path', type=str, help='Path to folder that contains all networks and continues to train from there', default='')
+    parser.add_argument('--train_last_scale_more', default=False, action='store_true', help='Continues to train last generator and critic.')
     parser.add_argument('--nc_z', type=int, help='noise # channels', default=3)
     parser.add_argument('--nc_im', type=int, help='image # channels', default=3)
     parser.add_argument('--out', help='output folder', default='Output')
@@ -32,9 +33,6 @@ def get_arguments():
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--batch_size_list', type=int, nargs='+', help="batch size in each one of the scales", default=[0])
     parser.add_argument('--norm_type', type=str, default='batch_norm')
-    parser.add_argument('--do_keep_prob', type=float, default=0.5)
-    parser.add_argument('--bias_in_tail', default=False, action='store_true')
-    parser.add_argument('--no_bias_in_tail', dest='bias_in_tail', action='store_false')
     parser.add_argument('--use_unet_generator', default=False, action='store_true', help='Uses U-Net as a generator from large enough scale')
     parser.add_argument('--nfc', type=int, default=8)
     parser.add_argument('--ker_size', type=int, help='kernel size', default=3)
@@ -49,7 +47,7 @@ def get_arguments():
     parser.add_argument('--num_scales', type=int, help='number of scales in the pyramid', default=None)
 
     # optimization hyper parameters:
-    parser.add_argument('--num_steps', type=int, default=1e5, help='number of steps to train per scale')
+    parser.add_argument('--epochs_per_scale', type=int, default=12, help='number of epochs to train per scale')
     parser.add_argument('--gamma', type=float, help='scheduler gamma', default=0.1)
     parser.add_argument('--lr_g', type=float, default=0.00025, help='learning rate, default=0.00025')
     parser.add_argument('--lr_d', type=float, default=0.00025, help='learning rate, default=0.00025')

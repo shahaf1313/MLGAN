@@ -3,15 +3,13 @@ import torch.nn as nn
 
 
 class ConvBlock(nn.Sequential):
-    def __init__(self, in_channel, out_channel, ker_size, padd, stride, norm_type, do_keep_prob=None):
+    def __init__(self, in_channel, out_channel, ker_size, padd, stride, norm_type):
         super(ConvBlock,self).__init__()
         self.add_module('conv',nn.Conv2d(in_channel ,out_channel,kernel_size=ker_size,stride=stride,padding=padd))
         if norm_type == 'batch_norm':
             self.add_module('norm',nn.BatchNorm2d(out_channel))
         elif norm_type == 'instance_norm':
             self.add_module('norm',nn.InstanceNorm2d(out_channel,affine=True))
-        elif norm_type=='dropout':
-            self.add_module('do', nn.Dropout2d(do_keep_prob))
         self.add_module('LeakyRelu',nn.LeakyReLU(0.2, inplace=True))
 
 def weights_init(m):
@@ -27,11 +25,11 @@ class WDiscriminator(nn.Module):
         super(WDiscriminator, self).__init__()
         self.is_cuda = torch.cuda.is_available()
         N = int(opt.nfc)
-        self.head = ConvBlock(opt.nc_im, N, opt.ker_size, padd=1, stride=1, norm_type=opt.norm_type, do_keep_prob=opt.do_keep_prob)
+        self.head = ConvBlock(opt.nc_im, N, opt.ker_size, padd=1, stride=1, norm_type=opt.norm_type)
         self.body = nn.Sequential()
         for i in range(opt.num_layer-2):
             N = int(opt.nfc/pow(2,(i+1)))
-            block = ConvBlock(max(2*N,opt.min_nfc), max(N,opt.min_nfc), opt.ker_size, padd=1, stride=1, norm_type=opt.norm_type, do_keep_prob=opt.do_keep_prob)
+            block = ConvBlock(max(2*N,opt.min_nfc), max(N,opt.min_nfc), opt.ker_size, padd=1, stride=1, norm_type=opt.norm_type)
             self.body.add_module('block%d'%(i+1),block)
         self.tail = nn.Sequential(nn.Conv2d(max(N,opt.min_nfc),1,kernel_size=opt.ker_size,stride=1,padding=1),
                                   nn.LeakyReLU(0.2))
@@ -52,14 +50,14 @@ class ConvGenerator(nn.Module):
         N = opt.nfc
         self.is_initial_scale = opt.curr_scale == 0
         alpha = 1 if self.is_initial_scale else 0
-        self.head = ConvBlock((2-alpha)*opt.nc_im, N, opt.ker_size, padd=1, stride=1, norm_type=opt.norm_type, do_keep_prob=opt.do_keep_prob) #GenConvTransBlock(opt.nc_z,N,opt.ker_size,opt.padd_size,opt.stride)
+        self.head = ConvBlock((2-alpha)*opt.nc_im, N, opt.ker_size, padd=1, stride=1, norm_type=opt.norm_type) #GenConvTransBlock(opt.nc_z,N,opt.ker_size,opt.padd_size,opt.stride)
         self.body = nn.Sequential()
         for i in range(opt.num_layer-2):
             N = int(opt.nfc/pow(2,(i+1)))
-            block = ConvBlock(max(2*N,opt.min_nfc), max(N,opt.min_nfc), opt.ker_size, padd=1, stride=1,  norm_type=opt.norm_type, do_keep_prob=opt.do_keep_prob)
+            block = ConvBlock(max(2*N,opt.min_nfc), max(N,opt.min_nfc), opt.ker_size, padd=1, stride=1,  norm_type=opt.norm_type)
             self.body.add_module('block%d'%(i+1),block)
         self.tail = nn.Sequential(
-            nn.Conv2d(max(N,opt.min_nfc), opt.nc_im, kernel_size=opt.ker_size, stride=1, padding=1, bias=opt.bias_in_tail),
+            nn.Conv2d(max(N,opt.min_nfc), opt.nc_im, kernel_size=opt.ker_size, stride=1, padding=1),
             nn.Tanh()
         )
     def forward(self, curr_scale, prev_scale):

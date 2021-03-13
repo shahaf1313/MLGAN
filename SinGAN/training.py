@@ -17,11 +17,13 @@ def train(opt):
     if opt.continue_train_from_path is not '':
         Gst, Gts, Dst, Dts = load_trained_networks(opt)
         assert len(Gst) == len(Gts) == len(Dst) == len(Dts)
-        scale_num = len(Gst)
+        scale_num = len(Gst) - 1 if opt.train_last_scale_more else 0
+        resume_first_iteration = True
     else:
         scale_num = 0
         Gst, Gts = [], []
         Dst, Dts = [], []
+        resume_first_iteration = False
 
     opt.tb = SummaryWriter(os.path.join(opt.tb_logs_dir, '%sGPU%d/' % (datetime.datetime.now().strftime('%d-%m-%Y::%H:%M:%S'), opt.gpus[0])))
 
@@ -36,13 +38,19 @@ def train(opt):
         except OSError:
             pass
 
-        Dst_curr, Gst_curr = init_models(opt)
-        Dts_curr, Gts_curr = init_models(opt)
-        # if (nfc_prev == opt.nfc and opt.curr_scale > 1):
-        #     Dst_curr.load_state_dict(torch.load('%s/%d/netDst.pth' % (opt.out_, scale_num - 1)))
-        #     Gst_curr.load_state_dict(torch.load('%s/%d/netGst.pth' % (opt.out_, scale_num - 1)))
-        #     Dts_curr.load_state_dict(torch.load('%s/%d/netDts.pth' % (opt.out_, scale_num - 1)))
-        #     Gts_curr.load_state_dict(torch.load('%s/%d/netGts.pth' % (opt.out_, scale_num - 1)))
+        if resume_first_iteration:
+            curr_nets = []
+            for net_list in [Dst, Gst, Dts, Gts]:
+                curr_net = net_list[scale_num].train()
+                curr_nets.append(functions.reset_grads(curr_net, True))
+                net_list.remove(net_list[scale_num])
+            Dst_curr, Gst_curr = curr_nets[0], curr_nets[1]
+            Dts_curr, Gts_curr = curr_nets[2], curr_nets[3]
+            resume_first_iteration = False
+        else:
+            Dst_curr, Gst_curr = init_models(opt)
+            Dts_curr, Gts_curr = init_models(opt)
+
         if len(opt.gpus) > 1:
             Dst_curr, Gst_curr = nn.DataParallel(Dst_curr, device_ids=opt.gpus), nn.DataParallel(Gst_curr, device_ids=opt.gpus)
             Dts_curr, Gts_curr = nn.DataParallel(Dts_curr, device_ids=opt.gpus), nn.DataParallel(Gts_curr, device_ids=opt.gpus)
@@ -83,6 +91,10 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
         print_int = 0
         save_pics_int = 0
         epoch_num = 1
+        batch_size = opt.source_loaders[opt.curr_scale].batch_size
+        PICS_PER_EPOCH = 10
+        opt.save_pics_rate = int(opt.epoch_size * np.maximum(opt.Dsteps, opt.Gsteps) / batch_size / PICS_PER_EPOCH)
+        total_steps_per_scale = opt.epochs_per_scale * int(opt.epoch_size * np.maximum(opt.Dsteps, opt.Gsteps) / batch_size)
         start = time.time()
         keep_training = True
 
@@ -90,9 +102,12 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
             print('scale %d: starting epoch %d...' % (opt.curr_scale, epoch_num))
             epoch_num += 1
             for batch_num, (source_scales, target_scales) in enumerate(zip(opt.source_loaders[opt.curr_scale], opt.target_loaders[opt.curr_scale])):
-                if steps > opt.num_steps:
+                if steps > total_steps_per_scale:
                     keep_training = False
                     break
+                # if steps > 50:
+                #     keep_training = False
+                #     break
 
                 # Move scale tensors to CUDA:
                 for i in range(len(source_scales)):
@@ -180,8 +195,8 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
 
                 if int(steps/opt.print_rate) >= print_int or steps == 0:
                     elapsed = time.time() - start
-                    print('scale %d:[%d/%d] ; elapsed time = %.2f secs per step' %
-                          (opt.curr_scale, print_int*opt.print_rate, opt.num_steps, elapsed/opt.print_rate))
+                    print('scale %d:[step %d/%d] ; elapsed time = %.2f secs per step, %.2f secs per image' %
+                          (opt.curr_scale, print_int*opt.print_rate, total_steps_per_scale, elapsed/opt.print_rate, elapsed/opt.print_rate/batch_size))
                     start = time.time()
                     print_int += 1
 
@@ -189,8 +204,8 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                     s     = norm_image(source_scales[opt.curr_scale][0])
                     t     = norm_image(target_scales[opt.curr_scale][0])
                     if cyc_images is None:
-                        _, _, _, cyc_images = cycle_consistency_loss(netGst, optimizerGst, source_scales[opt.curr_scale], source_scales, prev_sit,
-                                                                     netGts, optimizerGts, target_scales[opt.curr_scale], target_scales, prev_tis,
+                        _, _, _, cyc_images = cycle_consistency_loss(netGst, source_scales[opt.curr_scale], source_scales, prev_sit,
+                                                                     netGts, target_scales[opt.curr_scale], target_scales, prev_tis,
                                                                      opt)
                     sit   = norm_image(cyc_images[0][0])
                     sitis = norm_image(cyc_images[1][0])
