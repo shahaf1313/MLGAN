@@ -62,7 +62,9 @@ def get_arguments():
 
     # Semseg network parameters:
     parser.add_argument("--model", type=str, required=False, default='DeepLab', help="available options : DeepLab and VGG")
-    parser.add_argument("--multiscale_model_path", type=str, default='', help="path to Generators from source to target domain.")
+    parser.add_argument('--epochs_semseg', type=int, default=12, help='number of epochs to train semseg model')
+    parser.add_argument("--multiscale_model_st_path", type=str, default='', help="path to Generators from source to target domain.")
+    parser.add_argument("--multiscale_model_ts_path", type=str, default='', help="path to Generators from target to source domain.")
     parser.add_argument("--semseg_model_path", type=str, default='', help="path to folder that contains classifier and feature extractor weights.")
     parser.add_argument("--semseg_model_epoch_to_resume", type=int, default=-1, help='Epoch that checkpoint to semseg net saved from')
     parser.add_argument("--pretrained_semseg_path", type=str, default='', help="path weights file for pretrained semseg model.")
@@ -106,7 +108,7 @@ def post_config(opt):
         if opt.debug_run:
             opt.tb_logs_dir = './debug_runs'
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(opt.gpus)[1:-1].strip(' ')
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(opt.gpus)[1:-1].strip(' ').replace(" ", "")
         opt.device = torch.device('cpu' if opt.not_cuda else 'cuda')
         opt.out_ = 'TrainedModels/%s' % datetime.datetime.now().strftime('%d-%m-%Y::%H:%M:%S')
         try:

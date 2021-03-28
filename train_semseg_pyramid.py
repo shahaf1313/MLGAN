@@ -16,7 +16,7 @@ def main():
     opt = post_config(opt)
     from SemsegNetworks import CreateSemsegPyramidModel
     criterion = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_LABEL)
-    multiscale_model = torch.load(opt.multiscale_model_path, map_location='cpu')
+    multiscale_model = torch.load(opt.multiscale_model_st_path, map_location='cpu')
     opt.curr_scale = len(multiscale_model)
     opt.num_scales = len(multiscale_model)
     for scale in multiscale_model:
@@ -25,7 +25,6 @@ def main():
 
     source_train_loader = CreateSrcDataLoader(opt, 'train', get_image_label=True)
     opt.epoch_size = len(source_train_loader.dataset)
-    opt.num_epochs = int(opt.num_steps/opt.epoch_size)
     target_val_loader = CreateTrgDataLoader(opt, 'val')
 
     feature_extractor, classifier, optimizer_fea, optimizer_cls = CreateSemsegPyramidModel(opt)
@@ -42,6 +41,7 @@ def main():
     epoch_num = 1 if opt.semseg_model_epoch_to_resume > 0 else opt.semseg_model_epoch_to_resume + 1
     start = time.time()
     keep_training = True
+    total_steps = opt.epochs_semseg * int(opt.epoch_size / opt.batch_size)
 
     while keep_training:
         print('semeg train: starting epoch %d...' % (epoch_num))
@@ -49,7 +49,10 @@ def main():
         classifier.train()
 
         for batch_num, (source_scales, source_label) in enumerate(source_train_loader):
-            if steps > opt.num_steps:
+            if steps > total_steps:
+                keep_training = False
+                break
+            if opt.debug_run and steps > 15:
                 keep_training = False
                 break
 
@@ -80,7 +83,7 @@ def main():
             if int(steps/opt.print_rate) >= print_int or steps == 0:
                 elapsed = time.time() - start
                 print('train semseg:[%d/%d] ; elapsed time = %.2f secs per step' %
-                      (print_int*opt.print_rate, opt.num_steps, elapsed/opt.print_rate))
+                      (print_int*opt.print_rate, total_steps, elapsed/opt.print_rate))
                 start = time.time()
                 print_int += 1
 
@@ -96,6 +99,10 @@ def main():
                 save_pics_int += 1
 
             steps += 1
+
+        if opt.debug_run:
+            break
+
         # Update LR:
         scheduler_fea.step()
         scheduler_cls.step()

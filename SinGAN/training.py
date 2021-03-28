@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 def train(opt):
-    if opt.continue_train_from_path is not '':
+    if opt.continue_train_from_path != '':
         Gst, Gts, Dst, Dts = load_trained_networks(opt)
         assert len(Gst) == len(Gts) == len(Dst) == len(Dts)
         scale_num = len(Gst) - 1 if opt.train_last_scale_more else 0
@@ -52,8 +52,12 @@ def train(opt):
             Dts_curr, Gts_curr = init_models(opt)
 
         if len(opt.gpus) > 1:
-            Dst_curr, Gst_curr = nn.DataParallel(Dst_curr, device_ids=opt.gpus), nn.DataParallel(Gst_curr, device_ids=opt.gpus)
-            Dts_curr, Gts_curr = nn.DataParallel(Dts_curr, device_ids=opt.gpus), nn.DataParallel(Gts_curr, device_ids=opt.gpus)
+            # Dst_curr, Gst_curr = nn.DataParallel(Dst_curr, device_ids=opt.gpus), nn.DataParallel(Gst_curr, device_ids=opt.gpus)
+            # Dts_curr, Gts_curr = nn.DataParallel(Dts_curr, device_ids=opt.gpus), nn.DataParallel(Gts_curr, device_ids=opt.gpus) [i for i in range(len(opt.gpus))]
+
+            Dst_curr, Gst_curr = nn.DataParallel(Dst_curr), nn.DataParallel(Gst_curr)
+            Dts_curr, Gts_curr = nn.DataParallel(Dts_curr), nn.DataParallel(Gts_curr)
+
 
         scale_nets = train_single_scale(Dst_curr, Gst_curr, Dts_curr, Gts_curr, Gst, Gts, Dst, Dts, opt)
         for net in scale_nets:
@@ -105,9 +109,9 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                 if steps > total_steps_per_scale:
                     keep_training = False
                     break
-                # if steps > 50:
-                #     keep_training = False
-                #     break
+                if opt.debug_run and steps > 15:
+                    keep_training = False
+                    break
 
                 # Move scale tensors to CUDA:
                 for i in range(len(source_scales)):
@@ -131,16 +135,16 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
 
                     #S -> T:
                     D_x, D_G_z, errD = adversarial_disciriminative_train(netDst, netGst, prev_sit, target_scales[opt.curr_scale], source_scales, opt)
-                    opt.tb.add_scalar('Scale%d/ST/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_steps)
-                    opt.tb.add_scalar('Scale%d/ST/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_steps)
-                    opt.tb.add_scalar('Scale%d/ST/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_steps)
+                    opt.tb.add_scalar('Scale%d/ST/DiscriminatorLoss' % opt.curr_scale, errD.item()/opt.lambda_adversarial, discriminator_steps)
+                    opt.tb.add_scalar('Scale%d/ST/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x/opt.lambda_adversarial, discriminator_steps)
+                    opt.tb.add_scalar('Scale%d/ST/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z/opt.lambda_adversarial, discriminator_steps)
 
 
                     # T -> S:
                     D_x, D_G_z, errD = adversarial_disciriminative_train(netDts, netGts, prev_tis, source_scales[opt.curr_scale], target_scales, opt)
-                    opt.tb.add_scalar('Scale%d/TS/DiscriminatorLoss' % opt.curr_scale, errD.item(), discriminator_steps)
-                    opt.tb.add_scalar('Scale%d/TS/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x, discriminator_steps)
-                    opt.tb.add_scalar('Scale%d/TS/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z, discriminator_steps)
+                    opt.tb.add_scalar('Scale%d/TS/DiscriminatorLoss' % opt.curr_scale, errD.item()/opt.lambda_adversarial, discriminator_steps)
+                    opt.tb.add_scalar('Scale%d/TS/DiscriminatorRealImagesLoss' % opt.curr_scale, D_x/opt.lambda_adversarial, discriminator_steps)
+                    opt.tb.add_scalar('Scale%d/TS/DiscriminatorFakeImagesLoss' % opt.curr_scale, D_G_z/opt.lambda_adversarial, discriminator_steps)
 
                     discriminator_steps += 1
 
@@ -158,11 +162,11 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
 
                     # S -> T:
                     errG = adversarial_generative_train(netGst, netDst, prev_sit, source_scales, opt)
-                    opt.tb.add_scalar('Scale%d/ST/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
+                    opt.tb.add_scalar('Scale%d/ST/GeneratorAdversarialLoss' % opt.curr_scale, errG.item()/opt.lambda_adversarial, generator_steps)
 
                     # T -> S:
                     errG = adversarial_generative_train(netGts, netDts, prev_tis, target_scales, opt)
-                    opt.tb.add_scalar('Scale%d/TS/GeneratorAdversarialLoss' % opt.curr_scale, errG.item(), generator_steps)
+                    opt.tb.add_scalar('Scale%d/TS/GeneratorAdversarialLoss' % opt.curr_scale, errG.item()/opt.lambda_adversarial, generator_steps)
 
                     if opt.cyclic_loss_calc_rate > 0 and generator_steps % opt.cyclic_loss_calc_rate == 0:
                         # Cycle Consistency Loss:
@@ -172,9 +176,9 @@ def train_single_scale(netDst, netGst, netDts, netGts, Gst: list, Gts: list, Dst
                         cyc_loss_x, cyc_loss_y, cyc_loss, cyc_images = cycle_consistency_loss(netGst, source_scales[opt.curr_scale], source_scales, prev_sit,
                                                                                               netGts, target_scales[opt.curr_scale], target_scales, prev_tis,
                                                                                               opt)
-                        opt.tb.add_scalar('Scale%d/Cyclic/LossSTS' % opt.curr_scale, cyc_loss_x.item(), int(generator_steps/opt.cyclic_loss_calc_rate))
-                        opt.tb.add_scalar('Scale%d/Cyclic/LossTST' % opt.curr_scale, cyc_loss_y.item(), int(generator_steps/opt.cyclic_loss_calc_rate))
-                        opt.tb.add_scalar('Scale%d/Cyclic/Loss' % opt.curr_scale, cyc_loss.item(), int(generator_steps/opt.cyclic_loss_calc_rate))
+                        opt.tb.add_scalar('Scale%d/Cyclic/LossSTS' % opt.curr_scale, cyc_loss_x.item()/opt.lambda_cyclic, int(generator_steps/opt.cyclic_loss_calc_rate))
+                        opt.tb.add_scalar('Scale%d/Cyclic/LossTST' % opt.curr_scale, cyc_loss_y.item()/opt.lambda_cyclic, int(generator_steps/opt.cyclic_loss_calc_rate))
+                        opt.tb.add_scalar('Scale%d/Cyclic/Loss' % opt.curr_scale, cyc_loss.item()/opt.lambda_cyclic, int(generator_steps/opt.cyclic_loss_calc_rate))
 
                     if opt.identity_loss_calc_rate > 0 and generator_steps % opt.identity_loss_calc_rate == 0:
                         # Identity Loss:
